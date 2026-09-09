@@ -1,0 +1,1120 @@
+CODENTER
+AI SDR PLATFORM
+Developer Product Specification
+Website Intelligence → CRM → Personalized Outreach → AI Conversations → Meetings
+Production-oriented architecture, workflows, data model, APIs, AI behavior, deliverability, security, testing and deployment.
+Version 1.0  •  September 2026
+1. Product Overview
+Codenter AI SDR is an autonomous sales-development platform that learns a company's business from its website and connected business data, imports leads from a CRM, creates highly contextual outbound email campaigns, manages follow-ups, understands replies, handles common sales conversations, qualifies prospects, and books meetings.
+The product should be built as an AI sales workflow system rather than a simple bulk-email tool. The core loop is: understand the business → understand the target account → generate a relevant message → send on schedule → detect and interpret replies → respond safely → qualify intent → book a meeting or hand off → synchronize the outcome back to the CRM.
+CORE POSITIONINGEnter your website, connect your CRM, define your target. Codenter becomes an AI SDR that researches, personalizes, follows up, handles replies and books meetings.
+1.1 Product Goals
+Turn a website URL into a structured business knowledge base and reusable AI context.
+Connect to a CRM and import eligible leads/accounts with field-level mapping.
+Let users define campaigns using ICP, objective, messaging strategy, timing and safety rules.
+Generate personalized outbound emails using business knowledge + lead/account context + campaign goals.
+Execute multi-step follow-up sequences automatically with stop conditions and business-hour rules.
+Monitor inbound replies and classify intent before deciding whether AI should respond.
+Answer business questions using grounded knowledge instead of inventing pricing, capabilities or policies.
+Qualify interested prospects, capture qualification signals and update CRM fields.
+Offer calendar availability and book meetings with explicit confirmation.
+Provide transparent logs, analytics, controls and human handoff at every critical point.
+1.2 Non-Goals for the First Production Release
+Do not build a generic consumer email client.
+Do not position the system as an unrestricted mass-spam sender.
+Do not let the AI invent product claims, discounts, legal terms or availability.
+Do not auto-send every AI-generated reply without policy controls and confidence thresholds.
+Do not support every CRM/email/calendar provider in V1; use an adapter architecture and launch with a focused set.
+1.3 Recommended V1 Integrations
+Category
+V1 Recommendation
+Architecture Rule
+CRM
+HubSpot + one additional CRM connector
+Provider adapters behind a common interface
+Email
+Google Workspace/Gmail + Microsoft 365 via OAuth
+Provider abstraction; provider-specific send/receive modules
+Calendar
+Google Calendar + Microsoft Calendar
+Common availability/booking interface
+Knowledge
+Website crawler + browser rendering + document ingestion
+Reuse BrandScan Website Intelligence
+AI
+Provider-agnostic LLM + embeddings
+Model gateway with fallback and usage tracking
+Infrastructure
+FastAPI, PostgreSQL/pgvector, Redis, Celery, object storage
+Containerized services; async jobs for all long-running work
+2. End-to-End User Journey
+Create workspace and verify the business identity.
+Enter company website URL.
+Run Website Intelligence scan: crawl pages, render important pages when required, extract business facts, products, services, FAQs, pricing signals, CTAs, industries, brand voice and brand constraints.
+Review the generated Business Profile and correct anything inaccurate.
+Connect CRM and choose which leads/accounts can be synchronized.
+Connect a sending mailbox and complete domain/email readiness checks.
+Connect a calendar provider if meeting booking is enabled.
+Define ICP and campaign objective.
+Select leads or import a filtered lead segment.
+Generate campaign steps and preview sample emails.
+Launch campaign. Scheduler releases eligible steps into the sending queue.
+Inbound email worker receives replies and attaches them to the correct thread/lead.
+Conversation Engine classifies reply intent, checks knowledge and campaign state, then chooses: ignore/stop, send AI reply, ask clarification, schedule follow-up, or hand off.
+If meeting intent is detected, the agent offers approved slots and books only after confirmation.
+Campaign and CRM states are updated in near real time.
+Dashboard exposes sent, delivered, replied, positive replies, meetings, bounces, unsubscribes, AI actions and exceptions.
+2.1 Golden Path
+GOLDEN PATHWebsite URL → Business Profile → CRM Lead → ICP Match → Personalized Email → Follow-up → Reply → Intent Classification → Grounded AI Response → Qualification → Calendar Booking → CRM Update
+3. System Architecture
+Use a modular service-oriented backend inside a single deployable application initially, with clear internal boundaries. Split services physically only when scale or operational isolation justifies it.
+Layer
+Components
+Responsibility
+Frontend
+React + Vite + Tailwind
+Dashboard, campaign builder, inbox, lead detail, knowledge review, integrations, analytics
+API
+FastAPI
+Auth, workspace APIs, campaign APIs, CRM APIs, AI preview APIs, webhooks, admin endpoints
+Website Intelligence
+Crawler, browser renderer, extractor, normalizer, brand analyzer
+Website discovery, content extraction, business profile, source provenance
+Knowledge
+PostgreSQL + pgvector + object storage
+Documents, chunks, embeddings, metadata, source references
+Lead Intelligence
+Normalizer, enrichment adapter, ICP scorer
+Lead normalization, dedupe, scoring, personalization context
+Campaign Engine
+Scheduler, state machine, rule evaluator
+Step scheduling, delays, business hours, stop conditions
+Conversation Engine
+Classifier, retrieval, response planner, guardrails
+Reply understanding, grounded responses, qualification, handoff
+Email Layer
+Provider adapters, send worker, inbound parser
+OAuth, sending, threading, receive/sync, bounce/complaint events
+Calendar Layer
+Provider adapters
+Availability, tentative hold where supported, booking, cancellation
+Async
+Redis + Celery
+Crawl jobs, embeddings, enrichment, sends, reply processing, sync
+Observability
+Structured logs, metrics, traces, audit events
+Reliability, debugging, AI decisions, usage and security auditing
+3.1 High-Level Flow
+Frontend → FastAPI API → Domain services → PostgreSQL/pgvector. Long-running operations are queued through Redis/Celery. Email/calendar/CRM providers are accessed through adapters. AI calls pass through an internal Model Gateway so prompts, models, retries, token usage and safety policies are centrally controlled.
+3.2 Core Modules
+Identity & Workspace Service
+Website Intelligence Service
+Business Knowledge Service
+CRM Integration Service
+Lead Intelligence Service
+Campaign Service
+Scheduling Service
+Email Provider Service
+Inbound Email Service
+Conversation/AI Service
+Calendar Service
+Notification Service
+Analytics Service
+Usage/Billing Service
+Audit & Compliance Service
+4. Website Intelligence & Business Training
+The AI SDR should not be trained only from raw website text. The website is the authoritative starting point for business knowledge, while CRM fields, user-defined settings and campaign configuration provide operational context.
+4.1 Crawl Pipeline
+Validate URL and normalize domain.
+Fetch robots.txt and apply crawl policy.
+Discover sitemap.xml and internal links.
+Prioritize high-value pages: home, product/service, pricing, about, industries, use cases, case studies, FAQ, contact, documentation and legal/policy pages.
+Render JavaScript-heavy pages with a browser worker when static HTTP extraction is insufficient.
+Capture clean text plus source URL, title, headings, timestamps and extraction method.
+Optionally capture screenshots of representative pages for visual/brand analysis.
+Remove navigation/footer duplication and normalize content.
+Classify page type and business topic.
+Extract structured facts with provenance.
+Chunk useful content and generate embeddings.
+Build/update Business Profile and Knowledge Base.
+Run quality checks and surface low-confidence fields for human review.
+4.2 Business Profile Schema
+Field
+Examples
+Source/Control
+Company
+Name, legal/business name, description
+Website + user verification
+Offerings
+Products, services, plans, packages
+Website extraction
+Value propositions
+Benefits, differentiators, outcomes
+Website + AI extraction
+Industries
+SaaS, healthcare, agencies, etc.
+Website + user confirmation
+ICP hints
+Company size, roles, verticals
+Website + user settings
+Pricing
+Public prices, ranges, pricing model
+Website; never fabricate
+Features
+Feature catalog and capabilities
+Website
+FAQs
+Questions and grounded answers
+Website/docs
+Proof
+Case studies, testimonials, logos, metrics
+Website; preserve source
+Brand voice
+Formal, direct, friendly, technical, etc.
+AI inference + user override
+Claims policy
+Allowed claims, forbidden claims, disclaimers
+User/admin
+CTAs
+Demo, trial, contact sales, call, etc.
+Website + campaign
+Contact policy
+Support/sales contact rules
+User/admin
+4.3 Knowledge Rules
+Every factual knowledge item should retain source URL and extraction timestamp.
+Knowledge should be versioned so AI decisions can be reproduced.
+Deleted or stale pages must not silently remain authoritative forever.
+Pricing and policy information should have freshness metadata.
+When retrieval returns conflicting facts, prefer the newest verified source or request human review.
+The model must not treat lead-specific data as company-wide truth.
+5. CRM & Lead Intelligence
+5.1 CRM Sync
+OAuth connection with encrypted refresh-token storage.
+Initial import with field mapping and deduplication.
+Incremental sync using provider webhooks where available; polling fallback where necessary.
+Bidirectional updates for supported fields.
+Sync status and per-record errors visible to users.
+Respect CRM ownership, lifecycle stage and suppression fields.
+5.2 Canonical Lead Model
+Group
+Fields
+Identity
+id, first_name, last_name, email, phone, job_title
+Company
+company_name, domain, industry, employee_count, location, revenue_band
+CRM
+provider, provider_record_id, owner_id, lifecycle_stage, source
+Context
+lead_notes, custom_fields, previous_interactions
+Enrichment
+company_summary, role_summary, signals, source URLs, enriched_at
+Scoring
+icp_score, intent_score, total_score, score_band, reasons
+Consent/Suppression
+opt_out, do_not_contact, bounce_status, suppression_reason
+Campaign
+campaign membership, current_step, state, next_action_at
+Conversation
+thread_id, last_inbound_at, last_outbound_at, sentiment/intent
+Outcome
+qualified, meeting_booked, disqualified, handoff_required
+5.3 Lead Scoring
+Use deterministic rules plus an optional model-assisted score. Keep the final score explainable.
+Signal
+Example Weighting
+Notes
+ICP fit
+0–40
+Industry, size, geography, role
+Business relevance
+0–25
+Need/use-case alignment
+Intent
+0–20
+Reply signals, engagement, stated timing
+Data quality
+0–10
+Verified email/company data
+Negative signals
+0 to -20
+Competitor, outside ICP, opt-out, obvious mismatch
+Store score reasons as structured objects, not only as a single generated sentence. The UI should show why a lead is hot, warm or cold.
+6. Campaign Builder & Campaign State Machine
+6.1 Campaign Configuration
+Section
+Required Configuration
+Audience
+Lead list/segment, ICP filters, exclusions
+Objective
+Book demo, sales conversation, trial, qualification, etc.
+Offer
+What the prospect is being offered
+Tone
+Brand voice + user override
+Sequence
+Step count, delay, business hours, timezone policy
+Personalization
+Allowed lead/company fields and research depth
+AI policy
+Auto-send threshold, handoff rules, prohibited claims
+Stop rules
+Reply, positive reply, meeting, unsubscribe, bounce, manual stop
+Sending
+Mailbox, daily cap, pacing, domain policy
+Calendar
+Provider, meeting type, duration, availability rules
+6.2 Campaign States
+State
+Meaning
+DRAFT
+Editable; no sends
+REVIEW
+Generated content awaiting user review
+SCHEDULED
+Approved and waiting for launch time
+RUNNING
+Eligible leads are being processed
+PAUSED
+No new sends; current data preserved
+COMPLETED
+All eligible leads reached terminal state
+ARCHIVED
+Read-only historical campaign
+6.3 Per-Lead Sequence States
+State
+Transition Trigger
+QUEUED
+Lead enrolled
+WAITING
+Waiting until next step
+READY
+Eligible to send
+SENT
+Provider accepted outbound email
+REPLIED
+Inbound response received
+PAUSED
+Manual/system pause
+UNSUBSCRIBED
+Opt-out detected
+BOUNCED
+Hard bounce or provider suppression
+MEETING_BOOKED
+Calendar event confirmed
+QUALIFIED
+AI/user marked qualified
+DISQUALIFIED
+Not a fit
+HANDOFF
+Human attention required
+COMPLETED
+Sequence ended
+6.4 Stop Conditions
+Any explicit unsubscribe or do-not-contact signal.
+Hard bounce or provider suppression.
+Positive reply if configured to stop automated follow-ups.
+Meeting booked.
+Lead manually paused or removed.
+CRM lifecycle/status indicates active sales conversation.
+Human handoff requested.
+Campaign reaches maximum steps.
+Business rule or compliance policy blocks further contact.
+7. Personalized Email Generation
+The generation pipeline should assemble a bounded context package before calling the model. Do not dump the entire knowledge base into the prompt.
+7.1 Context Assembly
+Load verified Business Profile.
+Load campaign objective, offer, tone and sequence step.
+Load canonical lead and company data.
+Retrieve only relevant knowledge chunks.
+Add approved personalization signals and research facts.
+Add previous thread summary if replying/following up.
+Apply prohibited-claim and privacy filters.
+Generate structured draft.
+Run validation and policy checks.
+Store prompt/version metadata and generated output for auditability.
+7.2 Output Contract
+The model should return structured JSON internally, for example: subject, body, personalization_facts, CTA, claims_used, confidence, risk_flags, and recommended_action. The API should never rely on parsing free-form model text to determine workflow state.
+7.3 Personalization Rules
+Use only facts available from approved sources.
+Never fabricate company initiatives, recent events, technologies, budgets or personal achievements.
+Personalization should be relevant to the offer, not merely decorative.
+Keep cold outbound concise; avoid long AI-generated essays.
+Use the recipient's role to adapt pain points and language.
+Do not expose hidden enrichment data that should not be disclosed to the recipient.
+Do not claim a human personally researched the prospect if the action was automated.
+8. AI Conversation & Reply Handling
+Inbound email processing is a first-class subsystem. Every reply must be classified before the agent decides whether to answer.
+8.1 Intent Taxonomy
+Intent
+Example Meaning
+Default Action
+POSITIVE_INTEREST
+Interested / wants to talk
+Respond + move toward meeting
+PRICING
+Asks price/cost
+Answer from verified pricing or route to sales
+PRODUCT_QUESTION
+Asks capability/detail
+Retrieve grounded answer
+OBJECTION
+Too expensive, already have solution, timing issue
+Handle objection if approved
+REQUEST_INFO
+Send details/material
+Provide approved info
+NOT_INTERESTED
+No thanks
+Stop campaign
+UNSUBSCRIBE
+Remove me
+Immediate suppression + stop
+WRONG_PERSON
+Not responsible
+Ask/capture correct contact if appropriate
+REFERRAL
+Points to another person
+Capture referral; update CRM
+TIMING
+Later/next quarter
+Pause and schedule future follow-up if permitted
+MEETING_REQUEST
+Asks to meet
+Offer availability / booking flow
+HUMAN_REQUEST
+Wants human
+Create handoff task and stop AI auto-replies
+OUT_OF_SCOPE
+Unknown/unrelated
+Safe clarification or handoff
+AUTO_REPLY
+OOO/system response
+Do not treat as sales intent
+8.2 Reply Processing Pipeline
+Receive inbound event/webhook or poll mailbox.
+Normalize MIME content, strip quoted history where possible, preserve raw message securely.
+Match message to email thread and lead.
+Deduplicate using provider message ID + content hash.
+Run unsubscribe/suppression detection first.
+Classify intent and urgency.
+Retrieve relevant business knowledge if a factual answer is required.
+Evaluate campaign and AI policy.
+Generate a structured response plan.
+Run safety/claim/PII/policy validation.
+Auto-send only when policy and confidence permit.
+Otherwise create human handoff.
+Update thread, campaign state, CRM and analytics.
+Record complete audit event.
+8.3 Conversation Memory
+Store raw messages separately from derived summaries.
+Maintain a compact rolling thread summary.
+Track commitments: promised info, requested date, proposed meeting, unresolved question.
+Never let a stale summary override a newer message.
+Use message timestamps and sender identity to establish chronology.
+9. AI Lead Qualification
+9.1 Qualification Framework
+Need: does the prospect have a problem the product solves?
+Fit: does the company match the ICP?
+Authority: is the person a relevant decision maker or influencer?
+Timing: immediate, later, unknown or no current need?
+Interest: explicit positive signal or weak engagement?
+Next step: meeting, information, referral, nurture or disqualification?
+9.2 Qualification Output
+Field
+Example
+qualification_status
+unqualified / developing / qualified
+fit_score
+0–100
+intent
+low / medium / high
+need
+structured value
+timing
+now / later / unknown
+authority
+decision_maker / influencer / unknown
+pain_points
+array of approved extracted signals
+next_action
+book_meeting / follow_up / handoff / stop
+reason_codes
+structured codes explaining the decision
+10. Meeting Booking
+10.1 Booking Flow
+Prospect expresses meeting intent or campaign CTA requests a meeting.
+AI confirms what meeting type is appropriate.
+Calendar Service retrieves available slots within configured business rules.
+Agent proposes a small number of slots using the prospect's timezone where reliable.
+Prospect selects a slot.
+System creates calendar event and records provider event ID.
+Send confirmation email.
+Stop relevant campaign sequence.
+Update CRM: meeting booked, timestamp, meeting type, owner and event reference.
+10.2 Calendar Safety
+Never claim a meeting is booked until provider confirmation is successful.
+Handle race conditions where two prospects attempt the same slot.
+Respect calendar busy/free data and configured buffers.
+Use idempotency keys for booking requests.
+Do not expose private calendar event details.
+11. Email Sending & Inbound Infrastructure
+11.1 Provider Abstraction
+Create a common interface such as EmailProvider with methods for OAuth, send, get message, list messages, watch/webhook registration, thread lookup, labels/folders and provider health. Provider-specific logic stays behind adapters.
+11.2 Sending Pipeline
+Campaign Scheduler creates a send job only when all eligibility checks pass.
+Send worker acquires an idempotency key and lead lock.
+Validate suppression, campaign state, mailbox limits and duplicate-send rules.
+Render final email from approved content.
+Send through provider adapter.
+Persist provider message ID/thread ID and timestamp.
+Schedule next step only after successful send.
+Emit analytics event.
+11.3 Deliverability Controls
+Per-mailbox and per-domain sending caps.
+Randomized pacing within configured windows; avoid burst sending.
+SPF/DKIM/DMARC readiness guidance.
+Bounce classification and automatic suppression.
+Unsubscribe detection and global/workspace suppression lists.
+Duplicate recipient prevention.
+Provider rate-limit handling with exponential backoff.
+Mailbox health indicators.
+Campaign-level pause switch.
+No sending when mailbox authentication is invalid.
+Honor applicable anti-spam, privacy and platform/provider policies.
+CRITICAL PRODUCT RULEThe system must make it easy to stop sending. A single unsubscribe, hard bounce, manual pause or compliance block must be able to prevent future campaign actions immediately.
+12. Database Design
+Use PostgreSQL as the system of record. Use pgvector for semantic retrieval. Keep operational relational fields normalized enough for reliable filtering; do not put the whole product into JSONB.
+Table
+Purpose
+Important Fields
+users
+Identity
+id, email, status
+workspaces
+Tenant boundary
+id, name, settings
+workspace_members
+RBAC
+workspace_id, user_id, role
+business_profiles
+Company knowledge summary
+workspace_id, profile_json, version
+knowledge_documents
+Source documents
+url, title, content_hash, source_type, fetched_at
+knowledge_chunks
+RAG units
+document_id, content, embedding, metadata
+crm_connections
+CRM OAuth/config
+workspace_id, provider, token_ref, status
+crm_leads
+Canonical lead
+email, company, CRM IDs, status, scores
+lead_enrichment
+Derived research
+lead_id, fields, sources, enriched_at
+campaigns
+Campaign definition
+name, status, objective, config
+campaign_steps
+Sequence steps
+campaign_id, step_no, delay, template/config
+campaign_leads
+Lead state per campaign
+campaign_id, lead_id, state, next_action_at
+email_accounts
+Sending mailboxes
+provider, address, token_ref, limits, health
+email_messages
+Individual messages
+thread_id, provider_id, direction, body_ref, timestamps
+email_threads
+Conversation container
+lead_id, status, summary, last_message_at
+ai_responses
+AI decisions
+thread_id, intent, output, confidence, policy_result
+conversation_events
+Immutable event log
+thread_id, type, payload, created_at
+calendar_connections
+Calendar OAuth/config
+provider, token_ref, status
+appointments
+Bookings
+lead_id, provider_event_id, start, end, status
+suppression_list
+Do-not-contact
+workspace_id, email/domain, reason
+unsubscribe_events
+Compliance history
+email, source, timestamp
+usage_events
+Metering
+workspace_id, event_type, units, metadata
+audit_logs
+Security/admin audit
+actor, action, object, timestamp
+12.1 Tenant Isolation
+Every business object must have a workspace_id or an enforceable parent relationship to a workspace.
+Never trust workspace_id from the browser; derive authorization from the authenticated membership.
+Apply repository-level tenant filters and consider PostgreSQL row-level security for high-assurance deployments.
+Background workers must carry explicit workspace context.
+13. API Specification
+13.1 Core REST Endpoints
+Method
+Endpoint
+Purpose
+POST
+/api/v1/workspaces
+Create workspace
+GET
+/api/v1/business-profile
+Get current business profile
+POST
+/api/v1/website-scans
+Start website intelligence scan
+GET
+/api/v1/website-scans/{id}
+Scan progress/result
+POST
+/api/v1/integrations/crm/{provider}/connect
+Start CRM OAuth
+POST
+/api/v1/integrations/email/{provider}/connect
+Start email OAuth
+POST
+/api/v1/integrations/calendar/{provider}/connect
+Start calendar OAuth
+POST
+/api/v1/leads/import
+Import/sync leads
+GET
+/api/v1/leads
+List/filter leads
+GET
+/api/v1/leads/{id}
+Lead detail + score + thread
+POST
+/api/v1/campaigns
+Create campaign
+POST
+/api/v1/campaigns/{id}/preview
+Generate campaign preview
+POST
+/api/v1/campaigns/{id}/launch
+Launch campaign
+POST
+/api/v1/campaigns/{id}/pause
+Pause campaign
+POST
+/api/v1/campaigns/{id}/resume
+Resume campaign
+GET
+/api/v1/campaigns/{id}/analytics
+Campaign metrics
+GET
+/api/v1/inbox/threads
+List conversations
+GET
+/api/v1/inbox/threads/{id}
+Conversation detail
+POST
+/api/v1/inbox/threads/{id}/handoff
+Assign to human
+POST
+/api/v1/calendar/availability
+Get meeting slots
+POST
+/api/v1/calendar/book
+Book meeting
+GET
+/api/v1/analytics/overview
+Workspace dashboard
+13.2 Webhooks
+CRM webhook endpoint: validate signature, enqueue event, return quickly.
+Email inbound webhook: validate provider signature, store event ID, enqueue processing.
+Email delivery/bounce events: update message and lead state idempotently.
+Calendar event webhook: reconcile cancellations/reschedules and update appointment state.
+All webhook handlers must be idempotent.
+14. Background Jobs & Scheduling
+Job
+Trigger
+Retry Strategy
+website_scan
+User action / refresh
+Exponential backoff; per-domain limits
+extract_page
+Crawler
+Retry transient failures
+embed_document
+New/changed knowledge
+Retry; dead-letter after threshold
+crm_sync
+Schedule/webhook
+Provider-aware retry
+lead_enrichment
+Campaign preparation
+Rate-limited retry
+campaign_scheduler
+Periodic
+Short interval; idempotent
+send_email
+Scheduler
+Provider-aware backoff
+inbound_email
+Webhook/poll
+At-least-once + dedupe
+classify_reply
+Inbound event
+Retry model/API failures
+generate_reply
+Conversation decision
+Retry with model fallback
+calendar_sync
+Webhook/schedule
+Retry + reconciliation
+analytics_rollup
+Periodic
+Idempotent aggregation
+14.1 Scheduler Design
+Store next_action_at in UTC; preserve lead and workspace timezone separately.
+Evaluate business hours at execution time, not only at campaign creation.
+Use database locks or Redis distributed locks to prevent duplicate execution.
+Claim jobs atomically before sending.
+Do not use a simple in-process Python scheduler for production-critical sends.
+Support pause/resume without losing sequence state.
+15. AI Architecture
+15.1 Specialized AI Components
+Component
+Responsibility
+Business AI
+Business Profile, products, services, value props, brand voice
+Lead Analyst
+ICP fit, account context, personalization and lead scoring
+Email Composer
+Outbound drafts and follow-ups
+Conversation Classifier
+Intent, urgency, sentiment, request type
+Conversation Planner
+Decide response vs handoff vs stop vs meeting
+Reply Composer
+Grounded inbound response
+Qualification Agent
+Extract need, fit, timing, authority and next action
+Safety/Policy Layer
+Claims, opt-out, sensitive data, confidence and send policy
+15.2 Model Gateway
+Centralize model selection and fallback.
+Track model, prompt version, token usage, latency and cost.
+Support structured output/schema validation.
+Add timeouts and retry policies.
+Redact or minimize sensitive data before external model calls where required.
+Allow workspace-level model policies without exposing provider credentials to the frontend.
+15.3 RAG Retrieval
+Hybrid retrieval is preferred: metadata filtering + semantic similarity, with keyword fallback where useful.
+Filter by workspace and knowledge version before vector search.
+Prefer high-confidence, recent sources for pricing and policy answers.
+Return citations/source URLs internally for audit and UI explainability.
+Use a small top-k and reranking step when necessary rather than stuffing many chunks into prompts.
+16. AI Guardrails & Human Handoff
+Risk
+Required Control
+Hallucinated claim
+Grounded retrieval + claim validation
+Wrong pricing
+Verified pricing source + freshness policy
+Unsubscribe miss
+Dedicated deterministic detector before LLM
+Sensitive data leakage
+Data minimization + policy filter
+Overly aggressive outreach
+Campaign policy + caps + stop rules
+Low-confidence reply
+Human handoff
+Legal/compliance question
+Do not improvise; handoff
+Security request
+Never reveal secrets/system prompts
+Angry recipient
+Stop sequence + handoff/acknowledgment
+Ambiguous identity
+Do not disclose account-specific information
+HUMAN-IN-THE-LOOPUsers need a clear inbox where AI drafts, reasoning signals, source facts and recommended actions can be reviewed. The AI should be autonomous by default only inside explicit policy boundaries.
+17. Frontend / Dashboard Requirements
+17.1 Main Navigation
+Overview
+Leads
+Campaigns
+Inbox
+Knowledge
+Integrations
+Calendar
+Analytics
+Settings
+17.2 Dashboard
+Active campaigns
+Emails sent
+Delivery/bounce rate
+Replies
+Positive replies
+Qualified leads
+Meetings booked
+Unsubscribes
+AI handoffs
+Campaign performance comparison
+17.3 Lead Detail
+Identity and company information
+ICP score with reasons
+Enrichment sources
+Campaign state
+Full conversation timeline
+AI intent and qualification
+CRM synchronization state
+Manual controls: pause, resume, handoff, disqualify, suppress
+17.4 Campaign Builder
+Audience selection
+ICP definition
+Campaign objective
+Offer/value proposition
+Tone and personalization controls
+Sequence builder
+Sending schedule
+AI policy
+Email preview
+Sample lead preview
+Validation checklist
+Launch confirmation
+18. Security, Privacy & Compliance
+OAuth tokens and provider secrets must be encrypted at rest.
+Never expose access/refresh tokens to the frontend.
+Use short-lived application sessions/access tokens.
+Apply RBAC at workspace and resource level.
+Validate all webhook signatures.
+Encrypt sensitive data in transit and at rest.
+Keep audit logs for integration changes, sends, AI decisions, suppression actions and admin operations.
+Implement data retention and deletion controls.
+Allow workspace export/deletion workflows.
+Protect inbound email HTML against active content when rendered in the UI.
+Sanitize attachments and never execute unknown content.
+Apply rate limits to authentication, scans, AI endpoints, webhook retries and manual send actions.
+Follow applicable email marketing, privacy and provider rules for the markets in which the product is used.
+19. Observability & Auditability
+Area
+Metrics / Logs
+Crawler
+pages discovered, success rate, render failures, crawl duration
+CRM
+records synced, conflicts, webhook lag, errors
+Email
+send attempts, accepted, bounced, provider errors, latency
+Campaign
+eligible leads, queued, sent, stopped, completed
+AI
+requests, latency, tokens, cost, validation failures, fallback rate
+Conversation
+intent distribution, auto-send rate, handoff rate
+Calendar
+availability failures, booking success, cancellation rate
+System
+CPU, memory, queue depth, DB latency, error rate
+Every automated action should have an event trail that answers: what happened, which rule allowed it, which AI/model version was involved, what data was used, and what downstream state changed.
+20. Testing Strategy
+20.1 Unit Tests
+Campaign state transitions
+Timezone/business-hour calculations
+Suppression detection
+Email deduplication/idempotency
+Lead scoring rules
+CRM field mapping
+RAG filters
+Calendar booking rules
+Policy/claim validation
+20.2 Integration Tests
+CRM OAuth and sync
+Email send and inbound threading
+Bounce/unsubscribe webhooks
+Calendar availability and booking
+Website crawling/rendering
+PostgreSQL/pgvector retrieval
+Redis/Celery task execution
+20.3 AI Evaluation
+Create a fixed benchmark set of business profiles, leads and inbound replies.
+Measure intent classification accuracy.
+Measure grounded-answer accuracy.
+Measure hallucinated-claim rate.
+Measure unsubscribe detection recall; false negatives must be treated as critical.
+Measure appropriate handoff rate.
+Measure meeting-booking correctness.
+Run regression tests whenever prompts/models change.
+20.4 End-to-End Scenarios
+New workspace → website scan → profile approval.
+CRM connect → import → dedupe → ICP scoring.
+Campaign preview → launch → scheduled send.
+Lead replies positively → AI responds → meeting booked → campaign stops.
+Lead says unsubscribe → suppression → no future send.
+Lead asks unknown pricing question → safe handoff.
+Provider returns rate limit → backoff → eventual send.
+Webhook delivered twice → exactly one state transition.
+User pauses campaign while jobs are queued → queued jobs re-check state and do not send.
+21. Deployment & Infrastructure
+21.1 Recommended Production Topology
+Nginx/reverse proxy
+React static frontend
+FastAPI application containers
+Celery worker containers
+Celery scheduler/beat or dedicated scheduler process
+Redis
+Managed PostgreSQL with pgvector
+Object storage for raw documents/attachments where required
+Monitoring/log aggregation
+Secret manager/environment secret injection
+21.2 Environment Separation
+Environment
+Purpose
+Local
+Developer work; mocked providers where possible
+Staging
+Provider sandbox/test accounts; production-like jobs
+Production
+Real customer data and sends; strict controls
+21.3 Scaling Strategy
+Scale API independently from workers.
+Scale email workers based on queue depth and provider limits.
+Separate browser/crawler workers from email workers because browser jobs are CPU/memory intensive.
+Use PostgreSQL connection pooling.
+Partition or archive high-volume email/event tables when required.
+Cache stable Business Profile and retrieval metadata.
+Use per-provider rate limiters.
+22. Suggested Repository Structure
+apps/  web/                       # React + Vite + Tailwind  api/                       # FastAPI application  worker/                    # Celery workerspackages/  ai/                        # Model gateway, prompts, schemas, evals  knowledge/                 # RAG + embeddings + source management  website_intelligence/      # crawler/render/extraction  crm/                       # provider adapters + sync engine  email/                     # provider adapters + threading  calendar/                  # calendar adapters  campaign/                  # state machine + scheduler rules  lead_intelligence/         # scoring + enrichment  compliance/                # suppression + policy checks  common/                    # shared types, config, utilitiesinfra/  docker/  nginx/  migrations/  monitoring/tests/  unit/  integration/  e2e/  ai_eval/
+23. Reuse With Codenter BrandScan
+The AI SDR should reuse the Website Intelligence layer already designed for Codenter BrandScan instead of implementing a second crawler/knowledge pipeline.
+Reusable Capability
+BrandScan
+AI SDR
+Website crawling
+Yes
+Reuse
+Browser rendering
+Yes
+Reuse
+Content normalization
+Yes
+Reuse
+Business fact extraction
+Yes
+Reuse
+Brand voice analysis
+Yes
+Reuse + campaign override
+Knowledge documents/chunks
+Yes
+Reuse
+Embeddings/vector search
+Yes
+Reuse
+Source provenance
+Yes
+Reuse
+Visual brand analysis
+Yes
+Optional for email branding/UI
+Chatbot runtime
+Yes
+Separate
+Campaign engine
+No
+Build for AI SDR
+CRM sync
+No
+Build for AI SDR
+Email infrastructure
+No
+Build for AI SDR
+Conversation reply engine
+Partial concept
+Build for AI SDR
+Calendar booking
+No
+Build for AI SDR
+ARCHITECTURE ADVANTAGEBrandScan becomes the shared Codenter Business Intelligence foundation. AI SDR and future Codenter agents can consume the same verified business profile and knowledge base.
+24. Development Phases
+Phase
+Scope
+Definition of Done
+1. Foundation
+Auth, workspaces, DB, RBAC, integrations framework
+Secure multi-tenant skeleton works
+2. Website Intelligence
+Crawler, extraction, profile, RAG
+URL produces reviewable Business Profile + KB
+3. CRM
+OAuth, import, mapping, dedupe, sync
+Leads reliably enter canonical model
+4. Email
+OAuth, send, receive, threading, events
+One mailbox can send and receive safely
+5. Campaigns
+Builder, sequence state machine, scheduler
+Approved campaign can execute deterministic sequence
+6. AI Personalization
+Context assembly, generation, validation
+Emails are grounded and explainable
+7. Conversation AI
+Intent, reply generation, handoff
+Inbound replies are classified and safely handled
+8. Qualification
+Scoring, extraction, CRM updates
+AI produces explainable qualification
+9. Calendar
+Availability + booking
+Meeting flow works end to end
+10. Analytics
+Dashboard, events, metrics
+Users can measure outcomes
+11. Hardening
+Security, load, AI evals, failure recovery
+Production readiness review passes
+12. Interpulse
+Optional voice handoff
+Qualified lead can move from email to AI voice workflow
+25. MVP Acceptance Criteria
+A user can create a workspace and securely connect supported providers.
+A website URL can be scanned and converted into a structured Business Profile and searchable knowledge base.
+A user can review/edit important business facts before campaign launch.
+CRM leads can be imported, normalized, deduplicated and filtered.
+An ICP can be defined and applied to lead scoring.
+A user can create a multi-step email campaign and preview generated emails.
+Campaign sends respect scheduling, business hours, suppression and rate limits.
+Replies are received, threaded and classified.
+Unsubscribe requests immediately suppress future outreach.
+AI replies use grounded business knowledge and do not fabricate unsupported claims.
+Low-confidence or sensitive cases can be routed to human handoff.
+The system can qualify a prospect and store explainable qualification data.
+A supported calendar can provide slots and confirm bookings.
+Booked meetings stop the relevant automated sequence.
+CRM state is updated after important outcomes.
+All critical automated actions are auditable.
+Workers and webhooks are idempotent and recover safely from retries.
+The product can be paused globally and per campaign.
+26. Failure Handling Matrix
+Failure
+Expected Behavior
+Website unavailable
+Mark scan failed/partial; do not fabricate profile
+Some pages blocked
+Continue with accessible pages; show coverage
+CRM token expired
+Pause sync; notify user; do not silently drop records
+Mailbox auth fails
+Disable sending; require reconnection
+Provider rate limit
+Backoff and retry
+Hard bounce
+Suppress recipient and stop sequence
+Duplicate webhook
+Ignore duplicate event
+AI provider unavailable
+Use fallback if policy allows; otherwise handoff/queue
+Low AI confidence
+Do not auto-send; create review task
+Calendar booking race
+Re-check availability and propose alternatives
+DB/queue outage
+Do not send from stale in-memory state
+Campaign paused
+All workers re-check state before send
+User deletes workspace
+Revoke integrations, stop jobs, apply retention/deletion workflow
+27. Product & Sales Analytics
+27.1 Core Metrics
+Emails sent
+Delivery/acceptance rate
+Bounce rate
+Reply rate
+Positive reply rate
+Qualified rate
+Meeting booking rate
+Unsubscribe rate
+Human handoff rate
+Average AI response latency
+AI auto-send rate
+AI fallback rate
+Campaign completion rate
+27.2 Funnel
+The main funnel should be: eligible leads → sends → delivered → replies → positive replies → qualified → meetings booked. Keep each stage independently measurable so users can identify where campaigns fail.
+28. Future Roadmap
+Additional CRM connectors
+LinkedIn/manual research signals where legally and technically appropriate
+Account-level buying committee mapping
+AI-generated call preparation
+Automated proposal/document sending with approval controls
+Advanced sequence branching based on conversation intent
+A/B testing with statistical reporting
+Revenue attribution
+Multi-channel orchestration
+Voice-agent handoff through Interpulse
+Shared Codenter Agent Memory across sales/support agents
+Custom agent policies and enterprise governance
+29. Developer Implementation Checklist
+Area
+Checklist
+Architecture
+Modular services, provider adapters, async jobs
+Auth
+OAuth, sessions/tokens, RBAC, workspace isolation
+Website
+Crawler, renderer, extraction, source provenance
+Knowledge
+Chunking, embeddings, retrieval, versioning
+CRM
+OAuth, mapping, import, dedupe, incremental sync
+Leads
+Canonical schema, enrichment, scoring, filters
+Campaign
+Builder, state machine, stop conditions, scheduler
+Email
+Provider adapter, send, receive, threading, rate limits
+AI
+Model gateway, structured outputs, prompts, RAG, evals
+Conversation
+Intent classifier, planner, reply composer, handoff
+Compliance
+Suppression, unsubscribe, bounce, audit
+Calendar
+Availability, booking, idempotency, reconciliation
+Analytics
+Event model, rollups, dashboard
+Security
+Encryption, secrets, webhook validation, tenant isolation
+Testing
+Unit, integration, E2E, AI regression
+Ops
+Docker, migrations, monitoring, queues, backups
+30. Engineering Principles
+Deterministic rules control safety-critical decisions; AI assists within those boundaries.
+Every external integration is behind an adapter.
+Every automated action is idempotent.
+Every important AI decision is explainable through structured outputs and source provenance.
+Every tenant is isolated by authorization and data boundaries.
+Every campaign can be paused.
+Every unsubscribe is authoritative.
+Every factual business claim should be traceable to a source or user-approved configuration.
+Long-running work belongs in background jobs.
+The database is the source of truth; queues are execution mechanisms, not state stores.
+Do not optimize for maximum email volume; optimize for relevant conversations and legitimate sales outcomes.
+FINAL PRODUCT DEFINITIONCodenter AI SDR is not an email automation screen with an LLM attached. It is a controlled autonomous sales system: Business Intelligence + Lead Intelligence + Campaign Orchestration + Conversation AI + Calendar + CRM synchronization.
+31. Technical References
+Playwright documentation — browser automation and page rendering/screenshot capabilities.
+pgvector documentation — PostgreSQL vector similarity search and indexing.
+FastAPI documentation — API/service implementation.
+PostgreSQL documentation — relational persistence and transactional guarantees.
+Redis/Celery documentation — asynchronous job execution.
+Google Workspace / Gmail API documentation — OAuth, message and thread integration.
+Microsoft Graph documentation — Microsoft 365 mail and calendar integration.
+HubSpot API documentation — CRM integration and webhooks.
+Google Calendar API documentation — availability and event creation.
+Applicable provider policies and email/privacy regulations for the jurisdictions in which customers operate.

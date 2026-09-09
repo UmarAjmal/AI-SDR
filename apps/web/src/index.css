@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Canvas Base */
+  --bg-canvas: #FAFBFC;
+  --bg-surface: #FFFFFF;
+  --bg-surface-frosted: rgba(255, 255, 255, 0.75);
+  --bg-surface-glass-heavy: rgba(255, 255, 255, 0.88);
+  --border-glass: rgba(255, 255, 255, 0.80);
+  --border-subtle: #E2E8F0;
+  
+  /* Text Layers */
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+
+  /* Default Dynamic Secondary Accent: Cobalt Blue Drafting Engine */
+  --accent-primary: #1D4ED8;
+  --accent-hover: #1E40AF;
+  --accent-subtle: #EFF6FF;
+  --accent-glow: rgba(29, 78, 216, 0.22);
+  --accent-border: rgba(29, 78, 216, 0.35);
+
+  /* 3D Acrylic Specular & Shadow Tokens */
+  --shadow-glass: 0 10px 25px -5px rgba(15, 23, 42, 0.04), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
+  --shadow-glass-elevated: 0 20px 35px -10px rgba(15, 23, 42, 0.08), 0 10px 15px -5px rgba(15, 23, 42, 0.04);
+  --specular-highlight: inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
+  --specular-accent: inset 0 1px 1px 0 rgba(255, 255, 255, 0.35);
+
+  /* Continuous Squircle Radius Tokens */
+  --squircle-sm: 12px;
+  --squircle-md: 18px;
+  --squircle-lg: 24px;
+  --squircle-xl: 32px;
+}
+
+[data-accent="indigo"] {
+  --accent-primary: #4F46E5;
+  --accent-hover: #4338CA;
+  --accent-subtle: #EEF2FF;
+  --accent-glow: rgba(79, 70, 229, 0.22);
+  --accent-border: rgba(79, 70, 229, 0.35);
+}
+[data-accent="emerald"] {
+  --accent-primary: #059669;
+  --accent-hover: #047857;
+  --accent-subtle: #ECFDF5;
+  --accent-glow: rgba(5, 150, 105, 0.22);
+  --accent-border: rgba(5, 150, 105, 0.35);
+}
+[data-accent="violet"] {
+  --accent-primary: #7C3AED;
+  --accent-hover: #6D28D9;
+  --accent-subtle: #F5F3FF;
+  --accent-glow: rgba(124, 58, 237, 0.22);
+  --accent-border: rgba(124, 58, 237, 0.35);
+}
+[data-accent="amber"] {
+  --accent-primary: #D97706;
+  --accent-hover: #B45309;
+  --accent-subtle: #FFFBEB;
+  --accent-glow: rgba(217, 119, 6, 0.22);
+  --accent-border: rgba(217, 119, 6, 0.35);
+}
+
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
