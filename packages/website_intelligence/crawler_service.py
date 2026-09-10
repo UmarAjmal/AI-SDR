@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import httpx
+from typing import Any
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,6 +16,20 @@ from packages.ai.embeddings import EmbeddingGenerator
 from packages.ai.extractors.business_extractor import BusinessExtractor
 
 logger = logging.getLogger("codenter.crawler.service")
+
+def _clean_pg_text(val: Any) -> str:
+    if val is None:
+        return ""
+    return str(val).replace("\x00", "").replace("\u0000", "")
+
+def _clean_pg_data(data: Any) -> Any:
+    if isinstance(data, str):
+        return data.replace("\x00", "").replace("\u0000", "")
+    elif isinstance(data, dict):
+        return {_clean_pg_text(k): _clean_pg_data(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [_clean_pg_data(item) for item in data]
+    return data
 
 class WebsiteCrawlerService:
     # Section 4.1 Crawl Pipeline: Comprehensive crawling up to 50 prioritized pages
@@ -110,12 +125,12 @@ class WebsiteCrawlerService:
                     # Step 22 & 28: Persist KnowledgeDocument
                     doc = KnowledgeDocument(
                         workspace_id=workspace_id,
-                        url=page.url,
-                        title=page.cleaned.title or "Web Page",
+                        url=_clean_pg_text(page.url),
+                        title=_clean_pg_text(page.cleaned.title or "Web Page")[:500],
                         content_hash=page.cleaned.content_hash,
                         source_type="WEBSITE",
-                        raw_text=page.cleaned.text,
-                        screenshot_url=page.screenshot_url,
+                        raw_text=_clean_pg_text(page.cleaned.text),
+                        screenshot_url=_clean_pg_text(page.screenshot_url) if page.screenshot_url else None,
                         fetched_at=page.fetched_at
                     )
                     db.add(doc)
@@ -123,9 +138,9 @@ class WebsiteCrawlerService:
 
                     # Step 27: Semantic Chunking & pgvector Embeddings
                     chunks = SemanticChunker.chunk_text(
-                        text=page.cleaned.text,
-                        source_url=page.url,
-                        title=page.cleaned.title,
+                        text=_clean_pg_text(page.cleaned.text),
+                        source_url=_clean_pg_text(page.url),
+                        title=_clean_pg_text(page.cleaned.title),
                         page_type=page.cleaned.page_type,
                         business_topic=page.cleaned.business_topic,
                         extraction_timestamp=page.fetched_at.isoformat()
@@ -137,10 +152,10 @@ class WebsiteCrawlerService:
                             workspace_id=workspace_id,
                             document_id=doc.id,
                             chunk_index=c.chunk_index,
-                            content=c.content,
+                            content=_clean_pg_text(c.content),
                             token_count=c.token_count,
                             embedding=emb,
-                            metadata_json=c.metadata
+                            metadata_json=_clean_pg_data(c.metadata)
                         )
                         db.add(k_chunk)
 
@@ -177,6 +192,7 @@ class WebsiteCrawlerService:
             await db.commit()
 
             extracted_data = BusinessExtractor.extract_from_pages(crawled_pages)
+            extracted_data = _clean_pg_data(extracted_data)
 
             # Check if active profile exists
             existing_prof_res = await db.execute(
@@ -240,7 +256,7 @@ class WebsiteCrawlerService:
                 scan_obj = scan_res.scalar_one_or_none()
                 if scan_obj:
                     scan_obj.status = ScanStatus.FAILED
-                    scan_obj.error_message = str(e)[:500]
+                    scan_obj.error_message = _clean_pg_text(str(e))[:500]
                     await db.commit()
                     return scan_obj
             except Exception as commit_err:

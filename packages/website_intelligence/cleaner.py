@@ -3,6 +3,11 @@ import re
 import urllib.parse
 from bs4 import BeautifulSoup
 
+def sanitize_postgres_text(text: str | None) -> str:
+    if not text:
+        return ""
+    return str(text).replace("\x00", "").replace("\u0000", "")
+
 class CleanedContent:
     def __init__(
         self,
@@ -18,17 +23,26 @@ class CleanedContent:
         contact_signals: dict | None = None,
         faq_candidates: list[dict] | None = None
     ):
-        self.title = title
-        self.text = text
+        self.title = sanitize_postgres_text(title)
+        self.text = sanitize_postgres_text(text)
         self.content_hash = content_hash
-        self.internal_links = internal_links
-        self.meta_description = meta_description
-        self.headings = headings or []
+        self.internal_links = [sanitize_postgres_text(l) for l in internal_links]
+        self.meta_description = sanitize_postgres_text(meta_description)
+        self.headings = [
+            {"level": h.get("level", 1), "text": sanitize_postgres_text(h.get("text", ""))}
+            for h in (headings or [])
+        ]
         self.page_type = page_type
         self.business_topic = business_topic
-        self.structured_tables = structured_tables or []
-        self.contact_signals = contact_signals or {}
-        self.faq_candidates = faq_candidates or []
+        self.structured_tables = [sanitize_postgres_text(t) for t in (structured_tables or [])]
+        self.contact_signals = {
+            k: [sanitize_postgres_text(v) for v in vals] if isinstance(vals, list) else sanitize_postgres_text(vals)
+            for k, vals in (contact_signals or {}).items()
+        }
+        self.faq_candidates = [
+            {"question": sanitize_postgres_text(f.get("question", "")), "answer": sanitize_postgres_text(f.get("answer", ""))}
+            for f in (faq_candidates or [])
+        ]
 
 class ContentCleaner:
     # Section 4.1 Rule 24: Remove navigation, footer, scripts, styles, boilerplate duplication
@@ -103,6 +117,7 @@ class ContentCleaner:
 
     @classmethod
     def clean_html(cls, html_content: str, base_url: str = "") -> CleanedContent:
+        html_content = sanitize_postgres_text(html_content)
         if not html_content:
             return CleanedContent(
                 title="",

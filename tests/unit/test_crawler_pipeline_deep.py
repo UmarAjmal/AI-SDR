@@ -105,3 +105,44 @@ def test_semantic_chunking_with_provenance_metadata():
     assert "extraction_timestamp" in chk.metadata
     assert chk.metadata["page_type"] == "CORE_OFFERING"
     assert chk.metadata["business_topic"] == "TECHNICAL_DOC"
+
+def test_null_byte_sanitization_prevents_postgresql_error():
+    """
+    Verify that 0x00 null bytes in web HTML, titles, text, and metadata
+    are strictly stripped before persisting into PostgreSQL UTF-8 text columns.
+    """
+    from packages.website_intelligence.crawler_service import _clean_pg_text, _clean_pg_data
+
+    dirty_html = "<html><head><title>Corrupted\x00Title</title></head><body><h1>Heading\x00One</h1><p>Text with null\x00byte.</p></body></html>"
+    cleaned = ContentCleaner.clean_html(dirty_html, base_url="https://store.myshopify.com/product\x00bad")
+
+    assert "\x00" not in cleaned.title
+    assert "\x00" not in cleaned.text
+    assert "\x00" not in cleaned.headings[0]["text"]
+    assert cleaned.title == "CorruptedTitle"
+    assert "Text with nullbyte." in cleaned.text
+
+    # Test chunking sanitization
+    chunks = SemanticChunker.chunk_text(
+        text="Chunk with \x00 null byte content",
+        source_url="https://site.com/item\x001",
+        title="Title\x00Test"
+    )
+    assert len(chunks) == 1
+    assert "\x00" not in chunks[0].content
+    assert "\x00" not in chunks[0].metadata["source_url"]
+    assert "\x00" not in chunks[0].metadata["title"]
+
+    # Test nested dict/list sanitization
+    dirty_data = {
+        "title\x00": "Clean\x00Me",
+        "nested": [{"desc": "Null\x00Found", "num": 123}],
+        "none_val": None
+    }
+    cleaned_dict = _clean_pg_data(dirty_data)
+    assert "title" in cleaned_dict
+    assert cleaned_dict["title"] == "CleanMe"
+    assert cleaned_dict["nested"][0]["desc"] == "NullFound"
+    assert cleaned_dict["nested"][0]["num"] == 123
+    assert _clean_pg_text("Safe\x00String") == "SafeString"
+

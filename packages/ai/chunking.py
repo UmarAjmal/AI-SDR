@@ -29,6 +29,9 @@ class SemanticChunker:
         if not text:
             return []
 
+        text = text.replace("\x00", "").replace("\u0000", "")
+        title = (title or "").replace("\x00", "").replace("\u0000", "")
+        source_url = source_url.replace("\x00", "").replace("\u0000", "")
         ts = extraction_timestamp or datetime.now(timezone.utc).isoformat()
 
         # Split by paragraphs / headings / markdown tables

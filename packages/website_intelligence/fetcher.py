@@ -65,7 +65,7 @@ class HybridPageFetcher:
         try:
             resp = await client.get(url)
             resp.raise_for_status()
-            html = resp.text
+            html = resp.text.replace("\x00", "").replace("\u0000", "")
             cleaned = ContentCleaner.clean_html(html, base_url=url)
             method = "STATIC_HTTP"
             screenshot_path = None
@@ -92,7 +92,7 @@ class HybridPageFetcher:
                             screenshot_path = screenshot_filename
 
                         await browser.close()
-                        html = rendered_html
+                        html = rendered_html.replace("\x00", "").replace("\u0000", "")
                         cleaned = ContentCleaner.clean_html(html, base_url=url)
                         method = "BROWSER_RENDERED"
                 except Exception as pe:
