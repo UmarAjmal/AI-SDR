@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timezone
 
 class ChunkItem:
     def __init__(self, chunk_index: int, content: str, token_count: int, metadata: dict):
@@ -9,18 +10,28 @@ class ChunkItem:
 
 class SemanticChunker:
     """
-    Chunks document text into 500-800 token slices with 100-token overlap,
-    preserving structural paragraph boundaries.
+    Section 4.1 Rule 27: Chunks document text into 500-800 token slices with 100-token overlap,
+    preserving structural markdown heading boundaries and source provenance.
     """
     APPROX_WORDS_PER_CHUNK = 400
     APPROX_WORDS_OVERLAP = 60
 
     @classmethod
-    def chunk_text(cls, text: str, source_url: str, title: str | None = None) -> list[ChunkItem]:
+    def chunk_text(
+        cls,
+        text: str,
+        source_url: str,
+        title: str | None = None,
+        page_type: str = "OTHER",
+        business_topic: str = "GENERAL",
+        extraction_timestamp: str | None = None
+    ) -> list[ChunkItem]:
         if not text:
             return []
 
-        # Split by paragraphs / headings
+        ts = extraction_timestamp or datetime.now(timezone.utc).isoformat()
+
+        # Split by paragraphs / headings / markdown tables
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
         chunks: list[ChunkItem] = []
         current_words: list[str] = []
@@ -38,7 +49,10 @@ class SemanticChunker:
                     metadata={
                         "source_url": source_url,
                         "title": title or "",
-                        "chunk_index": chunk_idx
+                        "chunk_index": chunk_idx,
+                        "page_type": page_type,
+                        "business_topic": business_topic,
+                        "extraction_timestamp": ts
                     }
                 ))
                 chunk_idx += 1
@@ -58,7 +72,10 @@ class SemanticChunker:
                 metadata={
                     "source_url": source_url,
                     "title": title or "",
-                    "chunk_index": chunk_idx
+                    "chunk_index": chunk_idx,
+                    "page_type": page_type,
+                    "business_topic": business_topic,
+                    "extraction_timestamp": ts
                 }
             ))
 

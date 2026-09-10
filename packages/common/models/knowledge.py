@@ -52,6 +52,36 @@ class BusinessProfile(Base, TimestampMixin):
     confidence_score: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    @property
+    def policies(self) -> list:
+        if isinstance(self.claims_policy, dict):
+            return self.claims_policy.get("policies", [])
+        return []
+
+    @property
+    def contact_info(self) -> dict:
+        if isinstance(self.claims_policy, dict):
+            return self.claims_policy.get("contact_info", {})
+        return {}
+
+    @property
+    def requires_human_review(self) -> bool:
+        if isinstance(self.claims_policy, dict) and "requires_human_review" in self.claims_policy:
+            return bool(self.claims_policy["requires_human_review"])
+        return self.confidence_score < 0.85
+
+    @property
+    def review_reasons(self) -> list:
+        if isinstance(self.claims_policy, dict):
+            return self.claims_policy.get("review_reasons", [])
+        return []
+
+    @property
+    def structured_facts(self) -> list:
+        if isinstance(self.claims_policy, dict):
+            return self.claims_policy.get("structured_facts", [])
+        return []
+
     # Relationships
     workspace = relationship("Workspace", backref="business_profiles")
 

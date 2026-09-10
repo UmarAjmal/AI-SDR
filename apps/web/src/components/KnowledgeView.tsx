@@ -34,23 +34,28 @@ export interface BusinessProfileData {
   company_name: string;
   legal_name?: string | null;
   description?: string | null;
-  offerings: string[] | any;
-  value_propositions: string[] | any;
+  offerings: Array<{ title: string; category?: string; price?: string | null; source_url?: string } | string>;
+  value_propositions: Array<{ benefit: string; source_url?: string } | string>;
   industries: string[] | any;
   icp_hints: Record<string, any>;
   pricing?: Record<string, any> | string | null;
-  features: string[] | any;
+  features: Array<{ name: string; source_url?: string } | string>;
   faqs: Array<{ question: string; answer: string; source_url?: string }>;
-  proof: Array<{ client?: string; metric?: string; summary?: string; quote?: string }>;
+  proof: Array<{ client?: string; metric?: string; summary?: string; quote?: string; source_url?: string }>;
+  policies?: Array<{ policy: string; source_url?: string }>;
+  contact_info?: { emails?: string[]; phones?: string[]; whatsapp?: string[]; addresses?: string[] };
+  structured_facts?: Array<{ statement: string; source_url: string; fact_type: string; confidence: number; extracted_at: string }>;
   brand_voice: Record<string, any>;
   claims_policy: {
     allowed_claims?: string[];
     forbidden_claims?: string[];
     disclaimers?: string[];
   };
-  ctas: string[];
+  ctas: Array<{ action: string; source_url?: string } | string>;
   version: number;
   confidence_score: number;
+  requires_human_review?: boolean;
+  review_reasons?: string[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -362,12 +367,53 @@ export const KnowledgeView: React.FC = () => {
   const toList = (val: any): string[] => {
     if (!val) return [];
     if (Array.isArray(val)) {
-      return val.map((item) => (typeof item === 'string' ? item : JSON.stringify(item)));
+      return val.map((item) => (typeof item === 'string' ? item : item.title || item.name || item.benefit || item.action || JSON.stringify(item)));
     }
     if (typeof val === 'object') {
       return Object.entries(val).map(([k, v]) => `${k}: ${v}`);
     }
     return [String(val)];
+  };
+
+  // Section 4.1 Rule 22 & 26: Render items with verifiable source provenance & links
+  const renderProvenanceItem = (item: any) => {
+    if (!item) return null;
+    if (typeof item === 'string') {
+      return <span className="text-slate-800 text-xs">{item}</span>;
+    }
+    const label = item.title || item.action || item.benefit || item.name || item.policy || item.statement || JSON.stringify(item);
+    const sourceUrl = item.source_url;
+    const price = item.price;
+    const category = item.category;
+
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-slate-800 text-xs">{label}</span>
+          {price && (
+            <span className="px-2 py-0.5 rounded-[8px] bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200/80">
+              {price}
+            </span>
+          )}
+          {category && (
+            <span className="px-1.5 py-0.5 rounded-[6px] bg-slate-100 text-slate-500 text-[10px]">
+              {category}
+            </span>
+          )}
+        </div>
+        {sourceUrl && (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 hover:underline pt-0.5"
+          >
+            <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+            <span className="truncate max-w-[260px]">{sourceUrl}</span>
+          </a>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -567,35 +613,81 @@ export const KnowledgeView: React.FC = () => {
               </div>
 
               {/* Pricing badge */}
-              {profile.pricing && (
-                <div className="p-3.5 rounded-[18px] bg-slate-50/90 border border-slate-200/80 shrink-0 max-w-xs">
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-400 mb-1">
-                    <DollarSign className="w-3 h-3 text-emerald-600" />
-                    Grounded Pricing Model
+              {profile.pricing && typeof profile.pricing === 'object' ? (
+                <div className="p-4 rounded-[18px] bg-slate-50/95 border border-slate-200/80 shrink-0 max-w-sm space-y-2 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500">
+                      <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                      Pricing Model ({profile.pricing.currency || 'USD'})
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                      {profile.pricing.model || 'PUBLIC_TIERS'}
+                    </span>
                   </div>
-                  <div className="text-xs font-bold text-slate-800 font-mono break-words">
-                    {typeof profile.pricing === 'string'
-                      ? profile.pricing
-                      : JSON.stringify(profile.pricing)}
-                  </div>
+                  {profile.pricing.detected_signals && profile.pricing.detected_signals.length > 0 && (
+                    <div className="text-xs font-bold text-slate-800 font-mono">
+                      {profile.pricing.detected_signals.slice(0, 5).join(', ')}
+                    </div>
+                  )}
+                  {profile.pricing.free_shipping_offer && (
+                    <div className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                      <Check className="w-3 h-3 text-emerald-500" />
+                      {profile.pricing.free_shipping_offer}
+                    </div>
+                  )}
+                  {profile.pricing.source_url && (
+                    <a
+                      href={profile.pricing.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:underline pt-0.5"
+                    >
+                      <ExternalLink className="w-2.5 h-2.5" />
+                      <span className="truncate max-w-[220px]">{profile.pricing.source_url}</span>
+                    </a>
+                  )}
                 </div>
-              )}
+              ) : profile.pricing ? (
+                <div className="p-3.5 rounded-[18px] bg-slate-50/90 border border-slate-200/80 shrink-0 max-w-xs">
+                  <div className="text-xs font-bold text-slate-800 font-mono">{String(profile.pricing)}</div>
+                </div>
+              ) : null}
             </div>
+
+            {/* Quality & Confidence Gate Alert (Rule 29) */}
+            {profile.requires_human_review && (
+              <div className="p-3.5 rounded-[16px] bg-amber-50/80 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-bold">Human Review Recommended:</span> Some fields require manual validation before autonomous sequence deployment.
+                  {profile.review_reasons && profile.review_reasons.length > 0 && (
+                    <ul className="list-disc list-inside text-[11px] opacity-90 pt-0.5">
+                      {profile.review_reasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Grid 1: Offerings & Value Propositions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Offerings */}
               <div className="p-4 rounded-[20px] bg-white/70 border border-white/80 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
-                  <Layers className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-                  Extracted Offerings &amp; Services
-                </h4>
-                <div className="space-y-1.5">
-                  {toList(profile.offerings).length > 0 ? (
-                    toList(profile.offerings).map((offering, idx) => (
-                      <div key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                    Extracted Catalog &amp; Offerings ({profile.offerings?.length || 0})
+                  </h4>
+                  <span className="text-[10px] text-slate-400 font-semibold">With Source Provenance</span>
+                </div>
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {profile.offerings && profile.offerings.length > 0 ? (
+                    profile.offerings.map((offering, idx) => (
+                      <div key={idx} className="p-2.5 rounded-[12px] bg-white/80 border border-slate-100/90 flex items-start gap-2.5 shadow-2xs">
                         <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>{offering}</span>
+                        {renderProvenanceItem(offering)}
                       </div>
                     ))
                   ) : (
@@ -606,16 +698,19 @@ export const KnowledgeView: React.FC = () => {
 
               {/* Value Propositions */}
               <div className="p-4 rounded-[20px] bg-white/70 border border-white/80 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  Core Value Propositions
-                </h4>
-                <div className="space-y-1.5">
-                  {toList(profile.value_propositions).length > 0 ? (
-                    toList(profile.value_propositions).map((vp, idx) => (
-                      <div key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    Core Value Propositions ({profile.value_propositions?.length || 0})
+                  </h4>
+                  <span className="text-[10px] text-slate-400 font-semibold">Grounded Claims</span>
+                </div>
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {profile.value_propositions && profile.value_propositions.length > 0 ? (
+                    profile.value_propositions.map((vp, idx) => (
+                      <div key={idx} className="p-2.5 rounded-[12px] bg-white/80 border border-slate-100/90 flex items-start gap-2.5 shadow-2xs">
                         <span className="text-emerald-500 font-bold">•</span>
-                        <span>{vp}</span>
+                        {renderProvenanceItem(vp)}
                       </div>
                     ))
                   ) : (
@@ -676,15 +771,15 @@ export const KnowledgeView: React.FC = () => {
                   Approved CTAs
                 </h4>
                 <div className="space-y-1.5">
-                  {toList(profile.ctas).length > 0 ? (
-                    toList(profile.ctas).map((cta, i) => (
-                      <div key={i} className="text-xs font-medium text-slate-700 flex items-center gap-2">
-                        <ArrowRight className="w-3 h-3 text-amber-500" />
-                        <span>{cta}</span>
+                  {profile.ctas && profile.ctas.length > 0 ? (
+                    profile.ctas.map((cta, i) => (
+                      <div key={i} className="text-xs font-medium text-slate-700 flex items-start gap-2">
+                        <ArrowRight className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        {renderProvenanceItem(cta)}
                       </div>
                     ))
                   ) : (
-                    <span className="text-xs text-slate-400 italic">Schedule demo, Free trial</span>
+                    <span className="text-xs text-slate-400 italic">Explore collection, Shop now</span>
                   )}
                 </div>
               </div>
@@ -703,7 +798,18 @@ export const KnowledgeView: React.FC = () => {
                     profile.faqs.map((faq, i) => (
                       <div key={i} className="p-2.5 rounded-[12px] bg-white/80 border border-slate-100 space-y-1">
                         <div className="text-xs font-bold text-slate-800">Q: {faq.question}</div>
-                        <div className="text-xs text-slate-600">A: {faq.answer}</div>
+                        <div className="text-xs text-slate-600 leading-relaxed">A: {faq.answer}</div>
+                        {faq.source_url && (
+                          <a
+                            href={faq.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:underline pt-0.5"
+                          >
+                            <ExternalLink className="w-2.5 h-2.5" />
+                            <span className="truncate max-w-xs">{faq.source_url}</span>
+                          </a>
+                        )}
                       </div>
                     ))
                   ) : (
@@ -731,10 +837,80 @@ export const KnowledgeView: React.FC = () => {
                           )}
                         </div>
                         <div className="text-xs text-slate-600">{item.summary || item.quote}</div>
+                        {item.source_url && (
+                          <a
+                            href={item.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:underline pt-0.5"
+                          >
+                            <ExternalLink className="w-2.5 h-2.5" />
+                            <span className="truncate max-w-xs">{item.source_url}</span>
+                          </a>
+                        )}
                       </div>
                     ))
                   ) : (
                     <div className="text-xs text-slate-400 italic">No case studies or testimonials recorded.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Grid 4: Commercial Policies & Contact Channels */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+              {/* Policies */}
+              <div className="p-4 rounded-[20px] bg-white/70 border border-white/80 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  Commercial Policies &amp; Terms ({profile.policies?.length || 0})
+                </h4>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {profile.policies && profile.policies.length > 0 ? (
+                    profile.policies.map((pol, idx) => (
+                      <div key={idx} className="p-2 rounded-[10px] bg-white/80 border border-slate-100 space-y-0.5">
+                        <div className="text-xs text-slate-800 font-medium">{pol.policy}</div>
+                        {pol.source_url && (
+                          <a href={pol.source_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:underline">
+                            <ExternalLink className="w-2.5 h-2.5" />
+                            <span className="truncate max-w-xs">{pol.source_url}</span>
+                          </a>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-xs text-slate-400 italic">Standard return and delivery terms apply.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Contact Channels */}
+              <div className="p-4 rounded-[20px] bg-white/70 border border-white/80 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
+                  <Globe className="w-3.5 h-3.5 text-blue-600" />
+                  Verified Channels &amp; Support
+                </h4>
+                <div className="space-y-2 text-xs text-slate-700">
+                  {profile.contact_info?.emails && profile.contact_info.emails.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-500">Emails:</span>
+                      <span className="font-mono text-slate-800">{profile.contact_info.emails.join(', ')}</span>
+                    </div>
+                  )}
+                  {profile.contact_info?.phones && profile.contact_info.phones.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-500">Phones:</span>
+                      <span className="font-mono text-slate-800">{profile.contact_info.phones.join(', ')}</span>
+                    </div>
+                  )}
+                  {profile.contact_info?.whatsapp && profile.contact_info.whatsapp.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-emerald-600">WhatsApp:</span>
+                      <span className="font-mono text-slate-800">{profile.contact_info.whatsapp.join(', ')}</span>
+                    </div>
+                  )}
+                  {(!profile.contact_info?.emails?.length && !profile.contact_info?.phones?.length) && (
+                    <div className="text-xs text-slate-400 italic">Direct contact channels grounded via website.</div>
                   )}
                 </div>
               </div>

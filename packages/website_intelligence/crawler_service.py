@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import httpx
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -15,7 +17,9 @@ from packages.ai.extractors.business_extractor import BusinessExtractor
 logger = logging.getLogger("codenter.crawler.service")
 
 class WebsiteCrawlerService:
-    MAX_PAGES_TO_CRAWL = 10
+    # Section 4.1 Crawl Pipeline: Comprehensive crawling up to 50 prioritized pages
+    MAX_PAGES_TO_CRAWL = 50
+    CONCURRENCY_LIMIT = 5
 
     @classmethod
     async def run_scan(
@@ -24,8 +28,11 @@ class WebsiteCrawlerService:
         scan_id: str,
         base_url: str,
         db: AsyncSession,
-        mock_client: httpx.AsyncClient | None = None
+        mock_client: httpx.AsyncClient | None = None,
+        max_pages: int | None = None
     ) -> WebsiteScan:
+        crawl_limit = max_pages or cls.MAX_PAGES_TO_CRAWL
+
         # Load scan record
         scan_res = await db.execute(select(WebsiteScan).where(WebsiteScan.id == scan_id))
         scan = scan_res.scalar_one()
@@ -33,6 +40,7 @@ class WebsiteCrawlerService:
         scan.status = ScanStatus.IN_PROGRESS
         await db.commit()
 
+        # Step 17: Validate URL and normalize domain
         normalized_base = URLNormalizer.normalize(base_url)
         crawled_pages: list[FetchedPage] = []
         failed_count = 0
@@ -40,47 +48,66 @@ class WebsiteCrawlerService:
         owns_client = False
         client = mock_client
         if client is None:
-            client = httpx.AsyncClient(timeout=15.0, follow_redirects=True)
+            client = httpx.AsyncClient(timeout=20.0, follow_redirects=True)
             owns_client = True
 
         try:
-            # 1. Robots check
+            # Step 18: Fetch robots.txt and apply crawl policy
             robots = RobotsParser()
             await robots.fetch_and_parse(normalized_base, client=client)
 
-            # 2. Discover URLs via Sitemap + prioritize
+            # Step 19 & 20: Discover sitemap.xml and child sitemaps with prioritization
             discovered = await SitemapCrawler.discover_urls(normalized_base, client=client)
             scan.pages_discovered = len(discovered)
             await db.commit()
 
-            # 3. Filter URLs permitted by robots and limit to top N
-            target_urls = [
+            # Target URLs prioritized and filtered by robots
+            target_urls: list[str] = [
                 u for u, prio in discovered if robots.can_fetch(u)
-            ][:cls.MAX_PAGES_TO_CRAWL]
+            ]
 
-            # Guarantee that base_url is always included in target URLs
+            # Guarantee that base_url / homepage is always included first
             if not target_urls or normalized_base not in target_urls:
                 target_urls.insert(0, normalized_base)
-            target_urls = target_urls[:cls.MAX_PAGES_TO_CRAWL]
 
-            # 4. Crawl prioritized pages with dynamic internal link discovery
             scan.status = ScanStatus.CRAWLING
             await db.commit()
 
             visited: set[str] = set()
-            idx = 0
-            while idx < len(target_urls) and len(crawled_pages) < cls.MAX_PAGES_TO_CRAWL:
-                url = target_urls[idx]
-                idx += 1
-                if url in visited:
-                    continue
-                visited.add(url)
+            semaphore = asyncio.Semaphore(cls.CONCURRENCY_LIMIT)
 
-                try:
-                    page = await HybridPageFetcher.fetch(url, client=client)
+            async def fetch_single_page(url_to_crawl: str) -> FetchedPage | None:
+                async with semaphore:
+                    try:
+                        return await HybridPageFetcher.fetch(url_to_crawl, client=client)
+                    except Exception as fe:
+                        logger.warning(f"Failed crawling page {url_to_crawl}: {fe}")
+                        return None
+
+            # Crawl prioritized pages with concurrent batch processing and dynamic internal link discovery
+            while target_urls and len(crawled_pages) < crawl_limit:
+                # Get next batch of unvisited URLs
+                batch = []
+                while target_urls and len(batch) < cls.CONCURRENCY_LIMIT and (len(crawled_pages) + len(batch)) < crawl_limit:
+                    next_url = target_urls.pop(0)
+                    if next_url not in visited:
+                        visited.add(next_url)
+                        batch.append(next_url)
+
+                if not batch:
+                    break
+
+                # Concurrently fetch the batch
+                results = await asyncio.gather(*[fetch_single_page(u) for u in batch])
+
+                for page in results:
+                    if page is None:
+                        failed_count += 1
+                        continue
+
                     crawled_pages.append(page)
 
-                    # Persist KnowledgeDocument
+                    # Step 22 & 28: Persist KnowledgeDocument
                     doc = KnowledgeDocument(
                         workspace_id=workspace_id,
                         url=page.url,
@@ -88,13 +115,22 @@ class WebsiteCrawlerService:
                         content_hash=page.cleaned.content_hash,
                         source_type="WEBSITE",
                         raw_text=page.cleaned.text,
-                        screenshot_url=page.screenshot_url
+                        screenshot_url=page.screenshot_url,
+                        fetched_at=page.fetched_at
                     )
                     db.add(doc)
                     await db.flush()
 
-                    # Chunk and Embed
-                    chunks = SemanticChunker.chunk_text(page.cleaned.text, source_url=page.url, title=page.cleaned.title)
+                    # Step 27: Semantic Chunking & pgvector Embeddings
+                    chunks = SemanticChunker.chunk_text(
+                        text=page.cleaned.text,
+                        source_url=page.url,
+                        title=page.cleaned.title,
+                        page_type=page.cleaned.page_type,
+                        business_topic=page.cleaned.business_topic,
+                        extraction_timestamp=page.fetched_at.isoformat()
+                    )
+
                     for c in chunks:
                         emb = await EmbeddingGenerator.get_embedding(c.content)
                         k_chunk = KnowledgeChunk(
@@ -108,27 +144,27 @@ class WebsiteCrawlerService:
                         )
                         db.add(k_chunk)
 
-                    # Dynamic internal link discovery from page content
-                    if len(target_urls) < cls.MAX_PAGES_TO_CRAWL:
-                        for in_link in page.cleaned.internal_links:
-                            norm_in = URLNormalizer.normalize(in_link)
-                            if (
-                                URLNormalizer.is_same_domain(normalized_base, norm_in)
-                                and norm_in not in visited
-                                and norm_in not in target_urls
-                            ):
-                                if robots.can_fetch(norm_in):
+                    # Dynamic internal link discovery from page content (Rule 19)
+                    for in_link in page.cleaned.internal_links:
+                        norm_in = URLNormalizer.normalize(in_link)
+                        if (
+                            URLNormalizer.is_same_domain(normalized_base, norm_in)
+                            and norm_in not in visited
+                            and norm_in not in target_urls
+                        ):
+                            if robots.can_fetch(norm_in):
+                                # Prioritize new link
+                                p_score = SitemapCrawler.prioritize_url(norm_in)
+                                if p_score >= 50:
+                                    target_urls.insert(0, norm_in)
+                                else:
                                     target_urls.append(norm_in)
-                                    if len(target_urls) >= cls.MAX_PAGES_TO_CRAWL:
-                                        break
 
-                except Exception as e:
-                    logger.warning(f"Failed crawling page {url}: {e}")
-                    failed_count += 1
-
-            scan.pages_discovered = max(scan.pages_discovered, len(target_urls), len(visited))
-            scan.pages_crawled = len(crawled_pages)
-            scan.pages_failed = failed_count
+                # Commit batch progress
+                scan.pages_discovered = max(scan.pages_discovered, len(visited) + len(target_urls))
+                scan.pages_crawled = len(crawled_pages)
+                scan.pages_failed = failed_count
+                await db.commit()
 
             if not crawled_pages:
                 scan.status = ScanStatus.FAILED
@@ -136,7 +172,7 @@ class WebsiteCrawlerService:
                 await db.commit()
                 return scan
 
-            # 5. Extract structured BusinessProfile
+            # Step 26, 28, 29: Extract structured facts with provenance and confidence gate
             scan.status = ScanStatus.EXTRACTING
             await db.commit()
 
@@ -154,6 +190,7 @@ class WebsiteCrawlerService:
             if existing_prof:
                 # Update existing profile
                 existing_prof.company_name = extracted_data["company_name"]
+                existing_prof.description = extracted_data["description"]
                 existing_prof.offerings = extracted_data["offerings"]
                 existing_prof.value_propositions = extracted_data["value_propositions"]
                 existing_prof.industries = extracted_data["industries"]
@@ -172,6 +209,7 @@ class WebsiteCrawlerService:
                 new_prof = BusinessProfile(
                     workspace_id=workspace_id,
                     company_name=extracted_data["company_name"],
+                    description=extracted_data["description"],
                     offerings=extracted_data["offerings"],
                     value_propositions=extracted_data["value_propositions"],
                     industries=extracted_data["industries"],

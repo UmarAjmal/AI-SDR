@@ -60,6 +60,13 @@ class BusinessProfileResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Section 4.1 Provenance & Policy fields
+    policies: list = []
+    contact_info: dict = {}
+    requires_human_review: bool = False
+    review_reasons: list[str] = []
+    structured_facts: list = []
+
 class KnowledgeSearchRequest(BaseModel):
     query: str
     top_k: int = 3
