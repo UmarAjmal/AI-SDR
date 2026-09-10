@@ -186,7 +186,7 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
               placeholder="Search for a workspace..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white/70 backdrop-blur-md border border-white/90 rounded-[16px] pl-10 pr-4 py-2.5 text-xs text-[var(--text-primary)] placeholder-slate-400 outline-none shadow-xs focus:ring-2 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-border)] transition-all"
+              className="w-full bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/90 hover:border-slate-300 rounded-[14px] pl-10 pr-4 py-2.5 text-xs text-[var(--text-primary)] placeholder-slate-400 outline-none shadow-2xs focus:ring-2 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-primary)] transition-all"
             />
           </div>
 
@@ -196,7 +196,7 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
               aria-label="Filter workspaces by status"
-              className="appearance-none bg-white/70 backdrop-blur-md border border-white/90 rounded-[16px] pl-3.5 pr-8 py-2.5 text-xs font-semibold text-[var(--text-secondary)] outline-none shadow-xs hover:bg-white cursor-pointer transition-all"
+              className="appearance-none bg-slate-50/80 hover:bg-white border border-slate-200/90 hover:border-slate-300 rounded-[14px] pl-3.5 pr-8 py-2.5 text-xs font-semibold text-[var(--text-secondary)] outline-none shadow-2xs cursor-pointer transition-all"
             >
               <option value="ALL">Status: All</option>
               <option value="ACTIVE">Status: Active</option>
@@ -211,7 +211,7 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as any)}
               aria-label="Sort workspaces list"
-              className="appearance-none bg-white/70 backdrop-blur-md border border-white/90 rounded-[16px] pl-3.5 pr-8 py-2.5 text-xs font-semibold text-[var(--text-secondary)] outline-none shadow-xs hover:bg-white cursor-pointer transition-all"
+              className="appearance-none bg-slate-50/80 hover:bg-white border border-slate-200/90 hover:border-slate-300 rounded-[14px] pl-3.5 pr-8 py-2.5 text-xs font-semibold text-[var(--text-secondary)] outline-none shadow-2xs cursor-pointer transition-all"
             >
               <option value="name">Sorted by name</option>
               <option value="recent">Sorted by recent</option>

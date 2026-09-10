@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Layers,
   LayoutDashboard,
@@ -10,8 +10,6 @@ import {
   Calendar,
   BarChart3,
   Settings,
-  Pin,
-  Home,
   X
 } from 'lucide-react';
 
@@ -32,7 +30,7 @@ interface CollapsibleSidebarProps {
   onSelectTab: (tab: ConsoleTab) => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
-  onGoToHome: () => void;
+  onGoToHome?: () => void;
 }
 
 interface NavItem {
@@ -60,22 +58,7 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
   onSelectTab,
   mobileOpen,
   onCloseMobile,
-  onGoToHome,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  // Auto-expand sidebar when on any workspace view
-  const [isPinned, setIsPinned] = useState(activeTab !== 'workspaces');
-
-  // Auto-open sidebar when navigating to any console page
-  React.useEffect(() => {
-    if (activeTab !== 'workspaces') {
-      setIsPinned(true);
-    }
-  }, [activeTab]);
-
-  // Expanded if pinned OR currently hovered
-  const isExpanded = isPinned || isHovered;
-
   const handleItemClick = (tabId: ConsoleTab) => {
     onSelectTab(tabId);
     onCloseMobile();
@@ -93,16 +76,14 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
 
       {/* Main Sidebar Shell */}
       <aside
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         className={`
           fixed md:sticky top-0 md:top-[57px] left-0 z-40
           h-screen md:h-[calc(100vh-57px)]
-          bg-white/90 backdrop-blur-xl border-r border-white/80
+          bg-white/95 backdrop-blur-xl border-r border-slate-200/80
           shadow-lg md:shadow-[var(--shadow-glass)]
-          sidebar-transition flex flex-col justify-between
-          ${isExpanded ? 'w-64' : 'w-16'}
-          ${mobileOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'}
+          flex flex-col justify-between w-64
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          transition-transform duration-200
         `}
       >
         {/* Mobile Header (Close Button) */}
@@ -133,7 +114,6 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => handleItemClick(item.id)}
-                title={!isExpanded ? item.label : undefined}
                 className={`
                   w-full flex items-center gap-3.5 px-3 py-2.5 rounded-[16px] text-xs font-semibold
                   transition-all duration-150 group relative
@@ -157,15 +137,13 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
                   />
                 </div>
 
-                {/* Text Label (shown when expanded) */}
-                {(isExpanded || mobileOpen) && (
-                  <span className="truncate flex-1 text-left animate-in fade-in duration-150">
-                    {item.label}
-                  </span>
-                )}
+                {/* Text Label */}
+                <span className="truncate flex-1 text-left">
+                  {item.label}
+                </span>
 
                 {/* Optional Badge */}
-                {(isExpanded || mobileOpen) && item.badge && (
+                {item.badge && (
                   <span
                     className={`px-1.5 py-0.5 rounded-[6px] text-[9px] font-black uppercase tracking-wider shrink-0 ${
                       isActive
@@ -180,40 +158,8 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
             );
           })}
         </div>
-
-        {/* Bottom Utility Controls */}
-        <div className="p-2.5 border-t border-slate-100/80 space-y-1">
-          {/* Return to Home Page */}
-          <button
-            type="button"
-            onClick={onGoToHome}
-            title={!isExpanded ? 'Return to Home Page' : undefined}
-            className="w-full flex items-center gap-3.5 px-3 py-2 rounded-[14px] text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100/80 transition-all text-left group"
-          >
-            <Home className="w-4 h-4 text-slate-400 group-hover:text-slate-700 shrink-0" />
-            {(isExpanded || mobileOpen) && (
-              <span className="truncate animate-in fade-in duration-150">Return to Home</span>
-            )}
-          </button>
-
-          {/* Desktop Pin / Collapse Lock */}
-          <button
-            type="button"
-            onClick={() => setIsPinned(!isPinned)}
-            className="hidden md:flex w-full items-center justify-between px-3 py-2 rounded-[14px] text-[11px] font-semibold text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 transition-all cursor-pointer"
-            title={isPinned ? 'Collapse Sidebar (Mini Icon Rail)' : 'Expand & Lock Sidebar Open'}
-          >
-            {isExpanded && (
-              <span className="truncate">
-                {isPinned ? 'Collapse Sidebar' : 'Lock Sidebar Open'}
-              </span>
-            )}
-            <div className="w-5 h-5 flex items-center justify-center shrink-0 ml-auto">
-              <Pin className={`w-3.5 h-3.5 ${isPinned ? 'text-[var(--accent-primary)] fill-[var(--accent-primary)]' : ''}`} />
-            </div>
-          </button>
-        </div>
       </aside>
     </>
   );
 };
+    

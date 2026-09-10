@@ -179,7 +179,7 @@ export const SettingsView: React.FC = () => {
                     type="number"
                     value={spendingLimit}
                     onChange={(e) => setSpendingLimit(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-[16px] pl-8 pr-4 py-3 text-sm font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-[var(--accent-glow)]"
+                    className="w-full bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/90 hover:border-slate-300 rounded-[14px] pl-8 pr-4 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-primary)] shadow-2xs transition-all"
                   />
                 </div>
               </div>

@@ -35,7 +35,7 @@ export const SquircleInput: React.FC<SquircleInputProps> = ({
           </div>
         )}
         <input
-          className={`w-full bg-white/70 backdrop-blur-md border border-white/80 rounded-[16px] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] shadow-[var(--shadow-glass)] outline-none transition-all duration-200 focus:bg-white/90 focus:ring-4 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-border)] ${
+          className={`w-full bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/90 hover:border-slate-300 rounded-[14px] px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 placeholder-slate-400 shadow-2xs outline-none transition-all duration-200 focus:ring-2 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-primary)] ${
             effectiveLeftIcon ? 'pl-10' : ''
           } ${rightIcon ? 'pr-10' : ''} ${error ? 'border-red-400 ring-2 ring-red-100' : ''} ${className}`}
           {...props}
@@ -73,7 +73,7 @@ export const SquircleTextarea: React.FC<SquircleTextareaProps> = ({
       )}
       <textarea
         rows={rows}
-        className={`w-full bg-white/70 backdrop-blur-md border border-white/80 rounded-[16px] p-4 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] shadow-[var(--shadow-glass)] outline-none transition-all duration-200 focus:bg-white/90 focus:ring-4 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-border)] resize-y ${
+        className={`w-full bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/90 hover:border-slate-300 rounded-[14px] p-3.5 text-xs sm:text-sm text-slate-800 placeholder-slate-400 shadow-2xs outline-none transition-all duration-200 focus:ring-2 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-primary)] resize-y ${
           error ? 'border-red-400 ring-2 ring-red-100' : ''
         } ${className}`}
         {...props}

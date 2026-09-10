@@ -70,8 +70,8 @@ export const AIPersonalizationModal: React.FC<AIPersonalizationModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur-2xl border border-white/80 rounded-[32px] shadow-[0_25px_50px_-12px_rgba(15,23,42,0.18)] p-6 sm:p-8 flex flex-col gap-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white border border-slate-200/90 rounded-[28px] sm:rounded-[32px] shadow-2xl p-6 sm:p-8 flex flex-col gap-6">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-100 pb-4">
           <div>
@@ -246,7 +246,7 @@ export const AIPersonalizationModal: React.FC<AIPersonalizationModalProps> = ({
                 type="text"
                 value={editedSubject}
                 onChange={(e) => setEditedSubject(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm rounded-[14px] border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
+                className="w-full px-3.5 py-2 text-sm rounded-[14px] bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/90 hover:border-slate-300 shadow-2xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-primary)] transition-all"
               />
             ) : (
               <div className="text-sm font-medium text-slate-900 bg-slate-50/60 px-3.5 py-2 rounded-[14px] border border-slate-100">
@@ -263,7 +263,7 @@ export const AIPersonalizationModal: React.FC<AIPersonalizationModalProps> = ({
                 rows={6}
                 value={editedBody}
                 onChange={(e) => setEditedBody(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm rounded-[16px] border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] font-sans"
+                className="w-full px-3.5 py-2.5 text-sm rounded-[14px] bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/90 hover:border-slate-300 shadow-2xs focus:outline-none focus:ring-2 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-primary)] font-sans transition-all"
               />
             ) : (
               <div className="text-sm text-slate-700 bg-slate-50/60 p-4 rounded-[16px] border border-slate-100 whitespace-pre-line leading-relaxed font-sans">

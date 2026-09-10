@@ -45,18 +45,18 @@ export const SquircleModal: React.FC<SquircleModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
-      {/* 3D Frosted Backdrop */}
+      {/* Clean Dimmed Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/25 backdrop-blur-md transition-opacity"
+        className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* 3D Frosted Acrylic Squircle Container */}
+      {/* Solid White Squircle Modal Container */}
       <div
         className={twMerge(
           clsx(
-            'relative w-full bg-white/92 backdrop-blur-2xl border border-white/90 rounded-[32px] p-6 sm:p-8 shadow-2xl shadow-slate-900/10 shadow-[inset_0_1px_1px_0_rgba(255,255,255,0.95)] z-10 transition-all duration-200 animate-in zoom-in-95',
+            'relative w-full bg-white border border-slate-200/90 rounded-[28px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl shadow-slate-900/20 z-10 transition-all duration-200 animate-in zoom-in-95',
             maxWidthStyles[maxWidth]
           )
         )}
