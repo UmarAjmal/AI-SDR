@@ -59,6 +59,9 @@ class WebsiteCrawlerService:
             ][:cls.MAX_PAGES_TO_CRAWL]
 
             # 4. Crawl prioritized pages
+            scan.status = ScanStatus.CRAWLING
+            await db.commit()
+
             for url in target_urls:
                 try:
                     page = await HybridPageFetcher.fetch(url, client=client)
@@ -106,6 +109,9 @@ class WebsiteCrawlerService:
                 return scan
 
             # 5. Extract structured BusinessProfile
+            scan.status = ScanStatus.EXTRACTING
+            await db.commit()
+
             extracted_data = BusinessExtractor.extract_from_pages(crawled_pages)
 
             # Check if active profile exists
@@ -162,9 +168,17 @@ class WebsiteCrawlerService:
 
         except Exception as e:
             logger.error(f"Fatal error during website scan {scan_id}: {e}")
-            scan.status = ScanStatus.FAILED
-            scan.error_message = str(e)
-            await db.commit()
+            try:
+                await db.rollback()
+                scan_res = await db.execute(select(WebsiteScan).where(WebsiteScan.id == scan_id))
+                scan_obj = scan_res.scalar_one_or_none()
+                if scan_obj:
+                    scan_obj.status = ScanStatus.FAILED
+                    scan_obj.error_message = str(e)[:500]
+                    await db.commit()
+                    return scan_obj
+            except Exception as commit_err:
+                logger.error(f"Failed to record failure status for scan {scan_id}: {commit_err}")
             return scan
         finally:
             if owns_client:

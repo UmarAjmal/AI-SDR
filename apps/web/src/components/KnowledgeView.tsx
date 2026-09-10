@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
   Globe,
@@ -60,7 +60,7 @@ interface WebsiteScanData {
   id: string;
   workspace_id: string;
   url: string;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'PARTIAL_FAILURE';
+  status: 'PENDING' | 'IN_PROGRESS' | 'CRAWLING' | 'EXTRACTING' | 'COMPLETED' | 'FAILED' | 'PARTIAL_FAILURE';
   pages_discovered: number;
   pages_crawled: number;
   pages_failed: number;
@@ -135,6 +135,22 @@ export const KnowledgeView: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  // Scan interval ref
+  const pollIntervalRef = useRef<any>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, [stopPolling]);
+
   // Main fetch function: Checks profile and latest scan
   const loadKnowledgeData = useCallback(async () => {
     setIsLoading(true);
@@ -163,25 +179,24 @@ export const KnowledgeView: React.FC = () => {
           loadedScan = scanRes.data;
           setLatestScan(scanRes.data);
           setScanUrl(scanRes.data.url);
+          setScanStatus(scanRes.data.status);
         }
       } catch (scanErr: any) {
         console.error('Error fetching latest scan:', scanErr);
       }
 
-      // 3. If scan is in progress or pending, start live polling
-      if (loadedScan && (loadedScan.status === 'PENDING' || loadedScan.status === 'IN_PROGRESS')) {
+      // 3. If a grounded Business Profile already exists, display it immediately
+      if (loadedProfile) {
+        setIsScanning(false);
+      } else if (
+        loadedScan &&
+        ['PENDING', 'IN_PROGRESS', 'CRAWLING', 'EXTRACTING'].includes(loadedScan.status)
+      ) {
         setIsScanning(true);
         setScanStatus(loadedScan.status);
         pollScanStatus(loadedScan.id);
-      } else if (!loadedProfile && loadedScan?.status === 'COMPLETED') {
-        // If scan completed, re-try fetching profile
-        try {
-          const res = await axios.get('/api/v1/business-profile');
-          if (res.data) {
-            setProfile(res.data);
-            setEditForm(res.data);
-          }
-        } catch {}
+      } else {
+        setIsScanning(false);
       }
     } finally {
       setIsLoading(false);
@@ -194,44 +209,68 @@ export const KnowledgeView: React.FC = () => {
 
   // Poller for crawling pipeline
   const pollScanStatus = useCallback((scanId: string) => {
-    const interval = setInterval(async () => {
+    stopPolling();
+    let tickCount = 0;
+
+    pollIntervalRef.current = setInterval(async () => {
+      tickCount++;
       try {
         const res = await axios.get(`/api/v1/website-scans/${scanId}`);
         const currentScan: WebsiteScanData = res.data;
         setLatestScan(currentScan);
         setScanStatus(currentScan.status);
 
-        // Progress simulation across Section 4.1 pipeline steps
-        setActiveStepIndex((prev) => (prev < CRAWL_PIPELINE_STEPS.length - 1 ? prev + 1 : prev));
+        // Progressively advance through Section 4.1 pipeline steps based on live status
+        if (currentScan.status === 'PENDING') {
+          setActiveStepIndex((prev) => Math.min(prev + 1, 3));
+        } else if (currentScan.status === 'IN_PROGRESS' || currentScan.status === 'CRAWLING') {
+          setActiveStepIndex((prev) => Math.max(prev, Math.min(prev + 1, 7)));
+        } else if (currentScan.status === 'EXTRACTING') {
+          setActiveStepIndex((prev) => Math.max(prev, Math.min(prev + 1, 10)));
+        }
 
-        if (currentScan.status === 'COMPLETED') {
-          clearInterval(interval);
+        if (currentScan.status === 'COMPLETED' || currentScan.status === 'PARTIAL_FAILURE') {
+          stopPolling();
+          // Step 11 is [Quality & Confidence Gate]
+          setActiveStepIndex(CRAWL_PIPELINE_STEPS.length - 1);
+
+          setTimeout(async () => {
+            setIsScanning(false);
+            setScanNotice('Website crawled, grounded facts extracted, and pgvector embeddings stored successfully!');
+            // Refresh profile data
+            try {
+              const profRes = await axios.get('/api/v1/business-profile');
+              if (profRes.data) {
+                setProfile(profRes.data);
+                setEditForm(profRes.data);
+              }
+            } catch (e) {
+              console.error('Error fetching new profile:', e);
+            }
+            setTimeout(() => setScanNotice(null), 8000);
+          }, 1000);
+        } else if (currentScan.status === 'FAILED') {
+          stopPolling();
           setIsScanning(false);
-          setScanNotice('Website crawled, grounded facts extracted, and pgvector embeddings stored successfully!');
-          // Refresh profile data
+          setScanNotice(`Crawl pipeline interrupted: ${currentScan.error_message || 'Please check URL reachability'}`);
+        } else if (tickCount > 45) {
+          // Safety timeout (110s): stop polling and check if profile is ready
+          stopPolling();
+          setIsScanning(false);
           try {
             const profRes = await axios.get('/api/v1/business-profile');
             if (profRes.data) {
               setProfile(profRes.data);
               setEditForm(profRes.data);
             }
-          } catch (e) {
-            console.error('Error fetching new profile:', e);
-          }
-          setTimeout(() => setScanNotice(null), 8000);
-        } else if (currentScan.status === 'FAILED') {
-          clearInterval(interval);
-          setIsScanning(false);
-          setScanNotice(`Crawl pipeline interrupted: ${currentScan.error_message || 'Please check URL reachability'}`);
+          } catch {}
         }
       } catch (err) {
-        clearInterval(interval);
+        stopPolling();
         setIsScanning(false);
       }
     }, 2500);
-
-    return () => clearInterval(interval);
-  }, []);
+  }, [stopPolling]);
 
   // Initiate new scan
   const handleStartScan = async (e?: React.FormEvent, overrideUrl?: string) => {

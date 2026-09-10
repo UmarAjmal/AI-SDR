@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import String, Text, Integer, Float, Boolean, JSON, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
+# pyrefly: ignore [missing-import]
 from pgvector.sqlalchemy import Vector
 
 from packages.common.models.base import Base, TimestampMixin, generate_uuid
@@ -18,6 +19,8 @@ class SafeVector(TypeDecorator):
 
 class ScanStatus(str, enum.Enum):
     PENDING = "PENDING"
+    CRAWLING = "CRAWLING"
+    EXTRACTING = "EXTRACTING"
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"

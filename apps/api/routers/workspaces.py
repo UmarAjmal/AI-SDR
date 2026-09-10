@@ -103,18 +103,9 @@ async def create_workspace(
     await db.commit()
     await db.refresh(workspace)
 
-    # 6. Immediately trigger the Crawl Pipeline
-    # Try Celery task dispatch; if broker is unreachable, run in asyncio background task
-    try:
-        run_website_scan_task.delay(
-            workspace_id=workspace.id,
-            scan_id=scan.id,
-            base_url=raw_url
-        )
-        logger.info(f"Dispatched Celery crawl task for workspace {workspace.id} ({raw_url})")
-    except Exception as err:
-        logger.warning(f"Celery dispatch failed ({err}). Spawning local asyncio crawl task...")
-        asyncio.create_task(_background_website_scan(workspace.id, scan.id, raw_url))
+    # 6. Immediately trigger the Crawl Pipeline in the background non-blockingly
+    asyncio.create_task(_background_website_scan(workspace.id, scan.id, raw_url))
+    logger.info(f"Spawned background crawl task for new workspace {workspace.id} ({raw_url})")
 
     return workspace
 
