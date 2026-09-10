@@ -13,6 +13,8 @@ import {
   Flame,
   BarChart3,
   LogOut,
+  Menu,
+  X
 } from 'lucide-react';
 import { SquircleButton } from './ui/SquircleButton';
 import { IntentBadge } from './ui/IntentBadge';
@@ -28,10 +30,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onGoToConsole }) => {
   const { isAuthenticated, user, workspace, logout } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const openAuth = (mode: 'login' | 'signup') => {
     setAuthModalMode(mode);
     setAuthModalOpen(true);
+    setMobileMenuOpen(false);
   };
 
   const handleHeroCTA = () => {
@@ -43,6 +47,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onGoToConsole }) => {
   };
 
   const scrollToSection = (id: string) => {
+    setMobileMenuOpen(false);
     const el = document.getElementById(id);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
@@ -52,24 +57,24 @@ export const HomePage: React.FC<HomePageProps> = ({ onGoToConsole }) => {
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] font-sans selection:bg-[var(--accent-subtle)] selection:text-[var(--accent-primary)]">
       {/* 1. Top Apple Frosted Acrylic Sticky Navbar */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-white/80 shadow-[var(--shadow-glass)] px-6 py-4 transition-all">
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-white/80 shadow-[var(--shadow-glass)] px-4 sm:px-6 py-3.5 sm:py-4 transition-all">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Logo & Brand Monogram */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <div className="w-10 h-10 rounded-[14px] bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-black text-sm flex items-center justify-center border border-[var(--accent-border)] shadow-xs">
+          <div className="flex items-center gap-2.5 sm:gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-[14px] bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-black text-xs sm:text-sm flex items-center justify-center border border-[var(--accent-border)] shadow-xs">
               SDR
             </div>
             <div>
-              <span className="text-base font-extrabold tracking-tight text-[var(--text-primary)]">
+              <span className="text-sm sm:text-base font-extrabold tracking-tight text-[var(--text-primary)]">
                 Codenter <span className="text-[var(--accent-primary)]">AI SDR</span>
               </span>
-              <p className="text-[10px] text-[var(--text-muted)] font-medium">
+              <p className="text-[9px] sm:text-[10px] text-[var(--text-muted)] font-medium">
                 Autonomous Sales Intelligence
               </p>
             </div>
           </div>
 
-          {/* Navigation Anchors */}
+          {/* Desktop Navigation Anchors */}
           <nav className="hidden lg:flex items-center gap-6 text-xs font-semibold text-[var(--text-secondary)]">
             <button onClick={() => scrollToSection('golden-path')} className="hover:text-[var(--accent-primary)] transition-colors">
               Golden Path
@@ -86,8 +91,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onGoToConsole }) => {
           </nav>
 
           {/* Right Header Actions */}
-          <div className="flex items-center gap-3">
-            <ThemePicker />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="hidden sm:block">
+              <ThemePicker />
+            </div>
 
             {/* If NOT Authenticated: Show Sign In & Sign Up buttons */}
             {!isAuthenticated ? (
@@ -148,8 +155,76 @@ export const HomePage: React.FC<HomePageProps> = ({ onGoToConsole }) => {
                 </button>
               </div>
             )}
+
+            {/* Mobile Hamburger Button */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-[12px] text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+              title="Open Navigation Menu"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden pt-4 pb-2 border-t border-slate-100 mt-3 space-y-3 animate-in slide-in-from-top-2 duration-150">
+            <div className="flex flex-col gap-2 text-xs font-bold text-[var(--text-secondary)]">
+              <button
+                onClick={() => scrollToSection('golden-path')}
+                className="text-left py-2 px-3 rounded-[12px] hover:bg-slate-100 hover:text-[var(--text-primary)]"
+              >
+                Golden Path
+              </button>
+              <button
+                onClick={() => scrollToSection('stop-rules')}
+                className="text-left py-2 px-3 rounded-[12px] hover:bg-slate-100 hover:text-[var(--text-primary)]"
+              >
+                Safety & 9 Stop Rules
+              </button>
+              <button
+                onClick={() => scrollToSection('intent-taxonomy')}
+                className="text-left py-2 px-3 rounded-[12px] hover:bg-slate-100 hover:text-[var(--text-primary)]"
+              >
+                14-Intent Taxonomy
+              </button>
+              <button
+                onClick={() => scrollToSection('architecture')}
+                className="text-left py-2 px-3 rounded-[12px] hover:bg-slate-100 hover:text-[var(--text-primary)]"
+              >
+                System Architecture
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500">Theme Accent</span>
+              <ThemePicker />
+            </div>
+
+            {!isAuthenticated && (
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <SquircleButton
+                  variant="frosted"
+                  size="sm"
+                  onClick={() => openAuth('login')}
+                  className="justify-center text-xs font-bold"
+                >
+                  Sign In
+                </SquircleButton>
+                <SquircleButton
+                  variant="primary"
+                  size="sm"
+                  onClick={() => openAuth('signup')}
+                  className="justify-center text-xs font-bold"
+                >
+                  Sign Up
+                </SquircleButton>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* 2. Hero Section */}
