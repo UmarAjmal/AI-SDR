@@ -12,6 +12,7 @@ import { SquircleButton } from './ui/SquircleButton';
 import { SquircleInput, SquircleTextarea } from './ui/SquircleInput';
 import { SquircleModal } from './ui/SquircleModal';
 import { ICPScoreGauge } from './ui/ICPScoreGauge';
+import { LeadDetailDrawer } from './LeadDetailDrawer';
 
 export interface QualificationDetails {
   need?: string;
@@ -441,16 +442,26 @@ export const LeadsView: React.FC = () => {
 
                     {/* Action */}
                     <td className="py-4 px-6 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => handleToggleOptOut(lead.id, lead.opt_out)}
-                        className={`text-xs font-medium px-2.5 py-1 rounded-[10px] transition-all ${
-                          lead.opt_out
-                            ? 'text-slate-600 bg-slate-100 hover:bg-slate-200'
-                            : 'text-red-600 hover:bg-red-50'
-                        }`}
-                      >
-                        {lead.opt_out ? 'Un-suppress' : 'Suppress'}
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedLead(lead)}
+                          className="text-xs font-semibold px-2.5 py-1 rounded-[10px] text-[var(--accent-primary)] bg-[var(--accent-subtle)] hover:bg-blue-100 border border-[var(--accent-border)] transition-all cursor-pointer"
+                          title="Open Lead Intelligence Sidebar"
+                        >
+                          View Details
+                        </button>
+                        <button
+                          onClick={() => handleToggleOptOut(lead.id, lead.opt_out)}
+                          className={`text-xs font-medium px-2.5 py-1 rounded-[10px] transition-all cursor-pointer ${
+                            lead.opt_out
+                              ? 'text-slate-600 bg-slate-100 hover:bg-slate-200'
+                              : 'text-red-600 hover:bg-red-50'
+                          }`}
+                        >
+                          {lead.opt_out ? 'Un-suppress' : 'Suppress'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -572,83 +583,13 @@ export const LeadsView: React.FC = () => {
         </form>
       </SquircleModal>
 
-      {/* Lead Detail Slide-Over / Modal */}
-      {selectedLead && (
-        <SquircleModal
-          isOpen={!!selectedLead}
-          onClose={() => setSelectedLead(null)}
-          title={`Lead Profile: ${selectedLead.first_name} ${selectedLead.last_name}`}
-          maxWidth="2xl"
-        >
-          <div className="space-y-6 pt-2">
-            {/* Top Identity Card */}
-            <div className="flex items-center justify-between p-4 rounded-[18px] bg-slate-50 border border-slate-200/80">
-              <div>
-                <h4 className="text-base font-bold text-[var(--text-primary)]">
-                  {selectedLead.first_name} {selectedLead.last_name}
-                </h4>
-                <p className="text-xs text-[var(--text-secondary)]">{selectedLead.job_title} at {selectedLead.company_name}</p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">{selectedLead.email}</p>
-              </div>
-              <ICPScoreGauge
-                score={selectedLead.total_score}
-                scoreBand={selectedLead.score_band}
-                reasons={selectedLead.reasons}
-                size="md"
-              />
-            </div>
-
-            {/* Score Reason Breakdown */}
-            <div>
-              <h5 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-2">
-                Explainable ICP Scoring Reasons
-              </h5>
-              <div className="space-y-1.5">
-                {selectedLead.reasons && selectedLead.reasons.length > 0 ? (
-                  selectedLead.reasons.map((r, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2.5 rounded-[12px] bg-white border border-slate-200/70 text-xs flex items-center justify-between"
-                    >
-                      <span className="text-[var(--text-secondary)]">{r.reason}</span>
-                      <span
-                        className={`font-bold ${
-                          r.points >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                        }`}
-                      >
-                        {r.points > 0 ? `+${r.points}` : r.points} pts
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-[var(--text-muted)] italic">
-                    Base score evaluated against target ICP parameters.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Action Bar */}
-            <div className="pt-2 flex items-center justify-between border-t border-slate-200">
-              <SquircleButton
-                variant={selectedLead.opt_out ? 'outline' : 'danger'}
-                size="sm"
-                onClick={() => handleToggleOptOut(selectedLead.id, selectedLead.opt_out)}
-              >
-                {selectedLead.opt_out ? 'Remove Global Suppression' : 'Suppress Lead (Opt-Out)'}
-              </SquircleButton>
-
-              <SquircleButton
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedLead(null)}
-              >
-                Close
-              </SquircleButton>
-            </div>
-          </div>
-        </SquircleModal>
-      )}
+      {/* Lead Detail Slide-Over Sidebar (Section 17.3) */}
+      <LeadDetailDrawer
+        lead={selectedLead}
+        isOpen={!!selectedLead}
+        onClose={() => setSelectedLead(null)}
+        onToggleOptOut={handleToggleOptOut}
+      />
     </div>
   );
 };

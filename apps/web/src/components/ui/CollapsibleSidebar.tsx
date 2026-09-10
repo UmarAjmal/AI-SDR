@@ -63,7 +63,15 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
   onGoToHome,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [isPinned, setIsPinned] = useState(false);
+  // Auto-expand sidebar when on any workspace view
+  const [isPinned, setIsPinned] = useState(activeTab !== 'workspaces');
+
+  // Auto-open sidebar when navigating to any console page
+  React.useEffect(() => {
+    if (activeTab !== 'workspaces') {
+      setIsPinned(true);
+    }
+  }, [activeTab]);
 
   // Expanded if pinned OR currently hovered
   const isExpanded = isPinned || isHovered;
@@ -192,12 +200,12 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
           <button
             type="button"
             onClick={() => setIsPinned(!isPinned)}
-            className="hidden md:flex w-full items-center justify-between px-3 py-2 rounded-[14px] text-[11px] font-semibold text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 transition-all"
-            title={isPinned ? 'Unpin Sidebar (Auto-collapse on hover)' : 'Pin Sidebar Open'}
+            className="hidden md:flex w-full items-center justify-between px-3 py-2 rounded-[14px] text-[11px] font-semibold text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 transition-all cursor-pointer"
+            title={isPinned ? 'Collapse Sidebar (Mini Icon Rail)' : 'Expand & Lock Sidebar Open'}
           >
             {isExpanded && (
               <span className="truncate">
-                {isPinned ? 'Pinned Open' : 'Auto-Collapse'}
+                {isPinned ? 'Collapse Sidebar' : 'Lock Sidebar Open'}
               </span>
             )}
             <div className="w-5 h-5 flex items-center justify-center shrink-0 ml-auto">
