@@ -77,6 +77,9 @@ pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
+
+# Deploy / verify Supabase Schema (PostgreSQL 17 + pgvector + 24 tables)
+python infra/setup_supabase.py
 ```
 
 ### 3. Frontend Setup
