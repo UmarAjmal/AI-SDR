@@ -19,13 +19,24 @@ app = FastAPI(
 )
 
 # CORS Configuration
+cors_origins = list(settings.CORS_ORIGINS)
+for o in [
+    "https://ai-sdr-two.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000"
+]:
+    if o not in cors_origins:
+        cors_origins.append(o)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=cors_origins,
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Mount Routers
@@ -48,11 +59,11 @@ async def root():
     return {
         "status": "online",
         "app": settings.APP_NAME,
-        "version": "1.0.0",
+        "version": "1.0.1",
         "environment": settings.APP_ENV,
-        "docs_url": "http://127.0.0.1:8000/docs",
-        "api_v1_prefix": settings.API_V1_STR,
-        "frontend_url": "http://localhost:5173"
+        "allowed_origins": cors_origins,
+        "docs_url": "/docs",
+        "api_v1_prefix": settings.API_V1_STR
     }
 
 @app.get("/healthz", tags=["System"])
@@ -60,7 +71,9 @@ async def healthz():
     return {
         "status": "healthy",
         "app": settings.APP_NAME,
-        "environment": settings.APP_ENV
+        "environment": settings.APP_ENV,
+        "version": "1.0.1",
+        "allowed_origins": cors_origins
     }
 
 @app.get("/live", tags=["System"])
