@@ -63,26 +63,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    try {
-      const savedToken = localStorage.getItem(TOKEN_KEY);
-      const savedUser = localStorage.getItem(USER_KEY);
-      const savedWs = localStorage.getItem(WS_KEY);
+    const initAuth = async () => {
+      try {
+        const savedToken = localStorage.getItem(TOKEN_KEY);
+        const savedUser = localStorage.getItem(USER_KEY);
+        const savedWs = localStorage.getItem(WS_KEY);
 
-      if (savedToken && savedUser && savedWs) {
-        const parsedWs = JSON.parse(savedWs);
-        setToken(savedToken);
-        setUser(JSON.parse(savedUser));
-        setWorkspace(parsedWs);
-        applyAuthHeaders(savedToken, parsedWs.id);
+        if (savedToken && savedUser && savedWs) {
+          const parsedWs = JSON.parse(savedWs);
+          const parsedUser = JSON.parse(savedUser);
+
+          // Check if token signature is expired
+          let isExpired = false;
+          try {
+            const payload = JSON.parse(atob(savedToken.split('.')[1]));
+            if (payload.exp && payload.exp * 1000 <= Date.now()) {
+              isExpired = true;
+            }
+          } catch {
+            isExpired = !savedToken.startsWith('demo-');
+          }
+
+          if (isExpired && !savedToken.startsWith('demo-')) {
+            try {
+              const refreshRes = await axios.post('/api/v1/auth/refresh');
+              const newAccessToken = refreshRes.data.access_token;
+              setToken(newAccessToken);
+              setUser(parsedUser);
+              setWorkspace(parsedWs);
+              localStorage.setItem(TOKEN_KEY, newAccessToken);
+              applyAuthHeaders(newAccessToken, parsedWs.id);
+            } catch {
+              console.warn('Session expired and refresh failed. Clearing credentials.');
+              localStorage.removeItem(TOKEN_KEY);
+              localStorage.removeItem(USER_KEY);
+              localStorage.removeItem(WS_KEY);
+              applyAuthHeaders(null, null);
+            }
+          } else {
+            setToken(savedToken);
+            setUser(parsedUser);
+            setWorkspace(parsedWs);
+            applyAuthHeaders(savedToken, parsedWs.id);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to restore auth session:', e);
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        localStorage.removeItem(WS_KEY);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (e) {
-      console.error('Failed to restore auth session:', e);
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-      localStorage.removeItem(WS_KEY);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    initAuth();
   }, []);
 
   // Axios response interceptor for graceful 401 token refresh
@@ -117,7 +152,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               failedQueue.push({ resolve, reject });
             })
               .then((newTok) => {
-                originalRequest.headers['Authorization'] = `Bearer ${newTok}`;
+                if (originalRequest.headers?.set) {
+                  originalRequest.headers.set('Authorization', `Bearer ${newTok}`);
+                } else if (originalRequest.headers) {
+                  originalRequest.headers['Authorization'] = `Bearer ${newTok}`;
+                }
                 return axios(originalRequest);
               })
               .catch((err) => Promise.reject(err));
@@ -134,7 +173,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             applyAuthHeaders(newAccessToken, workspace?.id || null);
 
             processQueue(null, newAccessToken);
-            originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+            if (originalRequest.headers?.set) {
+              originalRequest.headers.set('Authorization', `Bearer ${newAccessToken}`);
+            } else if (originalRequest.headers) {
+              originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+            }
             return axios(originalRequest);
           } catch (refreshErr) {
             processQueue(refreshErr, null);

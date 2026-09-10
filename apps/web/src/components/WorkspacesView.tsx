@@ -43,22 +43,11 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
   isCreateModalOpen = false,
   onCloseCreateModal,
 }) => {
-  const { workspace: currentAuthWs, switchWorkspace } = useAuth();
+  const { token, workspace: currentAuthWs, switchWorkspace } = useAuth();
 
   // Workspaces list state
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([
-    {
-      id: currentAuthWs?.id || 'ws-default-sdr-01',
-      name: currentAuthWs?.name || 'AI SDR',
-      region: 'AWS | ap-northeast-2',
-      tier: 'NANO',
-      leadsCount: 142,
-      campaignsCount: 3,
-      databaseMb: 26,
-      status: 'ACTIVE',
-      createdAt: '2026-09-01',
-    },
-  ]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState<boolean>(true);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'name' | 'recent'>('name');
@@ -80,10 +69,12 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
 
   // Fetch all workspaces from backend
   useEffect(() => {
+    let isMounted = true;
     const fetchWorkspaces = async () => {
+      setIsLoadingWorkspaces(true);
       try {
         const res = await axios.get('/api/v1/workspaces');
-        if (Array.isArray(res.data) && res.data.length > 0) {
+        if (isMounted && Array.isArray(res.data)) {
           const mapped: WorkspaceItem[] = res.data.map((w: any) => ({
             id: w.id,
             name: w.name,
@@ -100,11 +91,19 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
           setWorkspaces(mapped);
         }
       } catch (err) {
-        console.error('Failed to load workspaces:', err);
+        console.error('Failed to load workspaces from backend:', err);
+      } finally {
+        if (isMounted) setIsLoadingWorkspaces(false);
       }
     };
-    fetchWorkspaces();
-  }, []);
+
+    if (token) {
+      fetchWorkspaces();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [token, currentAuthWs?.id]);
 
   const handleCreateWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +118,7 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
       });
 
       const created: WorkspaceItem = {
-        id: res.data.id || `ws-${Date.now()}`,
+        id: res.data.id,
         name: res.data.name || newWsName.trim(),
         domain: res.data.domain,
         website_url: res.data.website_url || newWsWebsiteUrl.trim(),
@@ -132,7 +131,7 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
         createdAt: res.data.created_at || new Date().toISOString(),
       };
 
-      setWorkspaces((prev) => [...prev, created]);
+      setWorkspaces((prev) => [created, ...prev.filter((w) => w.id !== created.id)]);
       setNewWsName('');
       setNewWsWebsiteUrl('');
       setModalOpen(false);
@@ -146,28 +145,7 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
       onSelectWorkspace(created.id, created.name, 'knowledge');
     } catch (err: any) {
       console.error('Failed to create workspace on server:', err);
-      // Fallback
-      const created: WorkspaceItem = {
-        id: `ws-${Date.now()}`,
-        name: newWsName.trim(),
-        website_url: newWsWebsiteUrl.trim(),
-        region: 'AWS | ap-northeast-2',
-        tier: 'FREE',
-        leadsCount: 0,
-        campaignsCount: 0,
-        databaseMb: 1,
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-      };
-      setWorkspaces((prev) => [...prev, created]);
-      setNewWsName('');
-      setNewWsWebsiteUrl('');
-      setModalOpen(false);
-      onCloseCreateModal?.();
-      if (switchWorkspace) {
-        switchWorkspace({ id: created.id, name: created.name, role: 'OWNER' });
-      }
-      onSelectWorkspace(created.id, created.name, 'knowledge');
+      alert(err.response?.data?.detail || 'Failed to create workspace on server. Please try again.');
     } finally {
       setIsCreating(false);
     }
@@ -274,14 +252,33 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
 
       {/* 3. Main Workspaces Grid */}
       <div className="space-y-4">
-        <div
-          className={
-            viewMode === 'grid'
-              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5'
-              : 'space-y-3'
-          }
-        >
-          {filteredWorkspaces.map((ws) => (
+        {isLoadingWorkspaces ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[1, 2].map((k) => (
+              <div
+                key={k}
+                className="rounded-[24px] bg-white/60 border border-white/80 p-6 flex flex-col justify-between h-44 animate-pulse space-y-4 shadow-[var(--shadow-glass)]"
+              >
+                <div className="space-y-2">
+                  <div className="h-5 w-36 bg-slate-200 rounded-md" />
+                  <div className="h-3 w-24 bg-slate-100 rounded-md" />
+                </div>
+                <div className="flex justify-between pt-4 border-t border-slate-100">
+                  <div className="h-4 w-12 bg-slate-100 rounded-md" />
+                  <div className="h-4 w-20 bg-slate-100 rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            className={
+              viewMode === 'grid'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5'
+                : 'space-y-3'
+            }
+          >
+            {filteredWorkspaces.map((ws) => (
             <div
               key={ws.id}
               onClick={() => {
@@ -384,7 +381,8 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      )}
+    </div>
 
       {/* + New Workspace Squircle Modal */}
       <SquircleModal
