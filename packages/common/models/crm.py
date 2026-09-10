@@ -9,6 +9,7 @@ class CRMProviderType(str, enum.Enum):
     HUBSPOT = "HUBSPOT"
     SALESFORCE = "SALESFORCE"
     PIPEDRIVE = "PIPEDRIVE"
+    ZOHO = "ZOHO"
 
 class CRMSyncStatus(str, enum.Enum):
     CONNECTED = "CONNECTED"

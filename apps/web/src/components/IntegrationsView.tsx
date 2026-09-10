@@ -11,6 +11,12 @@ import {
   Sparkles,
   AlertTriangle,
   FileText,
+  Key,
+  ExternalLink,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
 } from 'lucide-react';
 import { FrostedGlassCard } from './ui/FrostedGlassCard';
 import { SquircleButton } from './ui/SquircleButton';
@@ -35,7 +41,7 @@ interface CalendarConn {
 
 interface CRMConn {
   id: string;
-  provider: string;
+  provider: 'HUBSPOT' | 'SALESFORCE' | 'PIPEDRIVE' | 'ZOHO';
   account_id?: string;
   account_name?: string;
   sync_status: 'CONNECTED' | 'SYNCING' | 'ERROR' | 'REVOKED';
@@ -49,12 +55,120 @@ interface CRMConn {
   }>;
 }
 
+type SupportedCRM = 'HUBSPOT' | 'SALESFORCE' | 'PIPEDRIVE' | 'ZOHO';
+
+interface CRMDefinition {
+  id: SupportedCRM;
+  name: string;
+  accentColor: string;
+  badgeBg: string;
+  badgeText: string;
+  description: string;
+  keyLabel: string;
+  keyPlaceholder: string;
+  helpTitle: string;
+  helpSteps: string[];
+  scopes: string[];
+  docUrl: string;
+  requiresInstanceUrl: boolean;
+  instanceUrlLabel?: string;
+  instanceUrlPlaceholder?: string;
+}
+
+const CRM_DEFINITIONS: CRMDefinition[] = [
+  {
+    id: 'HUBSPOT',
+    name: 'HubSpot CRM',
+    accentColor: '#FF7A59',
+    badgeBg: 'bg-orange-50',
+    badgeText: 'text-orange-600',
+    description: 'Bi-directional contacts sync, deal lifecycle stages, and automated SDR qualification write-backs.',
+    keyLabel: 'HubSpot Private App Access Token (pat-...) *',
+    keyPlaceholder: 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    helpTitle: 'HubSpot Private App Access Token Kaise Generate Karein?',
+    helpSteps: [
+      'HubSpot Dashboard mein login karein aur top-right Settings (gear icon ⚙️) par click karein.',
+      'Left sidebar menu se Integrations -> Private Apps select karein.',
+      'Create a private app button par click karein aur app ka name dein (e.g. AI SDR Sync).',
+      'Scopes tab mein jayein aur crm.objects.contacts.read aur crm.objects.contacts.write tick karein.',
+      'Create app click karein, popup mein Continue creating confirm karein aur generate hone wala Token (starts with pat-...) copy karke yahan paste karein.'
+    ],
+    scopes: ['crm.objects.contacts.read', 'crm.objects.contacts.write'],
+    docUrl: 'https://developers.hubspot.com/docs/api/private-apps',
+    requiresInstanceUrl: false,
+  },
+  {
+    id: 'SALESFORCE',
+    name: 'Salesforce CRM',
+    accentColor: '#00A1E0',
+    badgeBg: 'bg-sky-50',
+    badgeText: 'text-sky-600',
+    description: 'Enterprise SOQL Lead synchronization, cursor-based pagination, and bidirectional status updates.',
+    keyLabel: 'Connected App Access Token / Session Token *',
+    keyPlaceholder: '00D8c0000086XYZ!AQEAQ... (Bearer / Session Token)',
+    helpTitle: 'Salesforce Connected App Credentials Kaise Hasil Karein?',
+    helpSteps: [
+      'Salesforce Setup (gear icon ⚙️) mein jayein aur App Manager search karein.',
+      'New Connected App banayein aur Enable OAuth Settings check karein.',
+      'Selected OAuth Scopes mein api (Manage user data via APIs) aur refresh_token shamil karein.',
+      'Apna Salesforce Instance URL (e.g., https://yourcompany.my.salesforce.com) aur Access Token yahan provide karein.'
+    ],
+    scopes: ['api (Access and manage data)', 'refresh_token, offline_access'],
+    docUrl: 'https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/',
+    requiresInstanceUrl: true,
+    instanceUrlLabel: 'Salesforce Instance URL *',
+    instanceUrlPlaceholder: 'https://yourcompany.my.salesforce.com',
+  },
+  {
+    id: 'PIPEDRIVE',
+    name: 'Pipedrive CRM',
+    accentColor: '#00B050',
+    badgeBg: 'bg-emerald-50',
+    badgeText: 'text-emerald-600',
+    description: 'Fast Persons & Organization syncing, multi-email resolution, and instant deal/lead qualification.',
+    keyLabel: 'Personal API Token (40-char string) *',
+    keyPlaceholder: '40-character API token (e.g. 8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6071)',
+    helpTitle: 'Pipedrive Personal API Token Kahan se Milega?',
+    helpSteps: [
+      'Pipedrive account mein login karein.',
+      'Top-right avatar par click karein aur Personal preferences select karein.',
+      'API tab par click karein.',
+      'Apna 40-character Personal API token copy karein aur yahan paste karein.'
+    ],
+    scopes: ['contacts:read', 'contacts:full'],
+    docUrl: 'https://pipedrive.readme.io/docs/how-to-find-the-api-token',
+    requiresInstanceUrl: false,
+  },
+  {
+    id: 'ZOHO',
+    name: 'Zoho CRM',
+    accentColor: '#E42528',
+    badgeBg: 'bg-red-50',
+    badgeText: 'text-red-600',
+    description: 'Zoho CRM Leads module sync, country/currency revenue mapping, and opt-out synchronization.',
+    keyLabel: 'Zoho API Access / Refresh Token *',
+    keyPlaceholder: '1000.xxxx.xxxx (Zoho OAuth Token)',
+    helpTitle: 'Zoho CRM API Token & Data Center Domain Kaise Configure Karein?',
+    helpSteps: [
+      'Zoho API Console (https://api-console.zoho.com) open karein.',
+      'Add Client click karein aur Self Client select karein.',
+      'Scope enter karein: ZohoCRM.modules.leads.ALL,ZohoCRM.modules.contacts.ALL.',
+      'Generate code click karein aur generate hone wala Token aur apna API domain (e.g. https://www.zohoapis.com) yahan paste karein.'
+    ],
+    scopes: ['ZohoCRM.modules.leads.ALL', 'ZohoCRM.modules.contacts.ALL'],
+    docUrl: 'https://www.zoho.com/crm/developer/docs/api/v3/oauth-overview.html',
+    requiresInstanceUrl: true,
+    instanceUrlLabel: 'Zoho API Domain / Data Center *',
+    instanceUrlPlaceholder: 'https://www.zohoapis.com (or .eu / .in)',
+  },
+];
+
 export const IntegrationsView: React.FC = () => {
   const [mailboxes, setMailboxes] = useState<MailboxAccount[]>([]);
   const [calendars, setCalendars] = useState<CalendarConn[]>([]);
   const [crmConnections, setCrmConnections] = useState<CRMConn[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSyncingCrm, setIsSyncingCrm] = useState(false);
+  const [isSyncingCrm, setIsSyncingCrm] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Connect Mailbox Modal
@@ -72,10 +186,18 @@ export const IntegrationsView: React.FC = () => {
   const [calendarAccessToken, setCalendarAccessToken] = useState('');
   const [isConnectingCalendar, setIsConnectingCalendar] = useState(false);
 
-  // Connect HubSpot CRM Modal
+  // Connect CRM Modal
   const [isCrmModalOpen, setIsCrmModalOpen] = useState(false);
+  const [selectedCrmProvider, setSelectedCrmProvider] = useState<SupportedCRM>('HUBSPOT');
+  const [crmAuthMode, setCrmAuthMode] = useState<'KEY' | 'OAUTH'>('KEY');
   const [crmApiKey, setCrmApiKey] = useState('');
+  const [crmInstanceUrl, setCrmInstanceUrl] = useState('');
+  const [crmAccountName, setCrmAccountName] = useState('');
   const [isConnectingCrm, setIsConnectingCrm] = useState(false);
+
+  // Guide Drawer state
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [guideActiveTab, setGuideActiveTab] = useState<SupportedCRM>('HUBSPOT');
 
   // Per-Record Sync Errors Modal
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
@@ -178,21 +300,57 @@ export const IntegrationsView: React.FC = () => {
     }
   };
 
-  // Handle CRM Connection via OAuth
-  const handleConnectCrm = async (e: React.FormEvent) => {
+  // Open CRM Modal pre-selected
+  const handleOpenCrmModal = (provider: SupportedCRM) => {
+    setSelectedCrmProvider(provider);
+    setCrmApiKey('');
+    setCrmInstanceUrl(provider === 'ZOHO' ? 'https://www.zohoapis.com' : '');
+    setCrmAccountName('');
+    setCrmAuthMode('KEY');
+    setIsCrmModalOpen(true);
+  };
+
+  // Direct Connect via API Key / Access Token
+  const handleConnectCrmDirect = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!crmApiKey.trim()) return;
+
+    setIsConnectingCrm(true);
+    try {
+      await axios.post('/api/v1/integrations/crm/connect-key', {
+        provider: selectedCrmProvider,
+        api_key: crmApiKey.trim(),
+        instance_url: crmInstanceUrl.trim() || undefined,
+        account_name: crmAccountName.trim() || undefined,
+      });
+
+      setNotice(`${selectedCrmProvider} connected successfully with AES-256 encrypted credentials! Initial sync started.`);
+      setIsCrmModalOpen(false);
+      setCrmApiKey('');
+      setCrmInstanceUrl('');
+      await fetchIntegrations();
+    } catch (err: any) {
+      setNotice(err.response?.data?.detail || 'Failed to connect CRM.');
+    } finally {
+      setIsConnectingCrm(false);
+      setTimeout(() => setNotice(null), 5000);
+    }
+  };
+
+  // Handle CRM Connection via OAuth
+  const handleConnectCrmOAuth = async () => {
     setIsConnectingCrm(true);
     try {
       const redirectUri = window.location.origin + '/integrations';
       const authRes = await axios.post(
-        `/api/v1/integrations/crm/HUBSPOT/connect?redirect_uri=${encodeURIComponent(redirectUri)}`
+        `/api/v1/integrations/crm/${selectedCrmProvider}/connect?redirect_uri=${encodeURIComponent(redirectUri)}`
       );
       if (authRes.data?.authorization_url) {
-        setNotice('Redirecting to HubSpot OAuth authorization portal...');
+        setNotice(`Redirecting to ${selectedCrmProvider} OAuth authorization portal...`);
         window.location.href = authRes.data.authorization_url;
       }
     } catch (err: any) {
-      setNotice(err.response?.data?.detail || 'Failed to initiate HubSpot OAuth flow.');
+      setNotice(err.response?.data?.detail || `Failed to initiate ${selectedCrmProvider} OAuth flow.`);
     } finally {
       setIsConnectingCrm(false);
       setTimeout(() => setNotice(null), 4000);
@@ -201,7 +359,7 @@ export const IntegrationsView: React.FC = () => {
 
   // Trigger On-Demand CRM Sync
   const handleTriggerSync = async (connId: string) => {
-    setIsSyncingCrm(true);
+    setIsSyncingCrm(connId);
     try {
       await axios.post(`/api/v1/integrations/crm/${connId}/sync`);
       setNotice('CRM synchronization initiated in background!');
@@ -209,8 +367,24 @@ export const IntegrationsView: React.FC = () => {
     } catch (err: any) {
       setNotice(err.response?.data?.detail || 'Failed to trigger CRM sync.');
     } finally {
-      setIsSyncingCrm(false);
+      setIsSyncingCrm(null);
       setTimeout(() => setNotice(null), 4000);
+    }
+  };
+
+  // Disconnect CRM Connection
+  const handleDisconnectCrm = async (connId: string, providerName: string) => {
+    if (!window.confirm(`Are you sure you want to disconnect ${providerName}? Contacts in AI SDR will remain, but automatic sync will stop.`)) {
+      return;
+    }
+    try {
+      await axios.delete(`/api/v1/integrations/crm/${connId}`);
+      setNotice(`${providerName} disconnected successfully.`);
+      await fetchIntegrations();
+    } catch (err: any) {
+      setNotice(err.response?.data?.detail || 'Failed to disconnect CRM.');
+    } finally {
+      setTimeout(() => setNotice(null), 3000);
     }
   };
 
@@ -226,32 +400,50 @@ export const IntegrationsView: React.FC = () => {
     }
   };
 
+  const currentDef = CRM_DEFINITIONS.find((d) => d.id === selectedCrmProvider) || CRM_DEFINITIONS[0];
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-            Third-Party Integrations &amp; OAuth Adapters
+            Third-Party Integrations &amp; CRM Ecosystem
           </h2>
+          <p className="text-xs text-[var(--text-secondary)] mt-1">
+            Enterprise mailboxes, host calendars, and bi-directional CRM adapters with AES-256-GCM encrypted credentials.
+          </p>
         </div>
 
-        <SquircleButton
-          variant="outline"
-          size="sm"
-          onClick={fetchIntegrations}
-          disabled={isLoading}
-          className="flex items-center gap-1.5 self-start"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh Status
-        </SquircleButton>
+        <div className="flex items-center gap-2">
+          <SquircleButton
+            variant="outline"
+            size="sm"
+            onClick={() => setIsGuideOpen(!isGuideOpen)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-primary)] border-[var(--accent-glow)] bg-[var(--accent-subtle)]"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            CRM API Key Guide
+            {isGuideOpen ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
+          </SquircleButton>
+
+          <SquircleButton
+            variant="outline"
+            size="sm"
+            onClick={fetchIntegrations}
+            disabled={isLoading}
+            className="flex items-center gap-1.5"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </SquircleButton>
+        </div>
       </div>
 
       {/* Notice Banner */}
       {notice && (
-        <FrostedGlassCard className="p-3.5 border-blue-200/80 bg-blue-50/60 text-xs text-blue-800 flex items-center justify-between">
-          <span className="flex items-center gap-2">
+        <FrostedGlassCard className="p-3.5 border-blue-200/80 bg-blue-50/60 text-xs text-blue-800 flex items-center justify-between shadow-xs">
+          <span className="flex items-center gap-2 font-medium">
             <Sparkles className="w-4 h-4 text-blue-600 animate-pulse" />
             {notice}
           </span>
@@ -261,13 +453,94 @@ export const IntegrationsView: React.FC = () => {
         </FrostedGlassCard>
       )}
 
-      {/* 3 Main Integration Categories Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Expandable CRM Setup & API Key Guide */}
+      {isGuideOpen && (
+        <FrostedGlassCard elevated className="p-6 border-indigo-100 bg-white/90 space-y-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Key className="w-5 h-5 text-[var(--accent-primary)]" />
+              <h3 className="text-sm font-bold text-slate-800">
+                CRM Setup &amp; API Key Instructions (Kon Si Key Kahan Se Milegi?)
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-500 font-medium">
+              Step-by-step credentials guide for all CRMs
+            </span>
+          </div>
+
+          {/* CRM Tabs */}
+          <div className="flex flex-wrap gap-2">
+            {CRM_DEFINITIONS.map((crm) => (
+              <button
+                key={crm.id}
+                onClick={() => setGuideActiveTab(crm.id)}
+                className={`px-3 py-1.5 rounded-[12px] text-xs font-bold transition-all ${
+                  guideActiveTab === crm.id
+                    ? 'bg-[var(--accent-primary)] text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {crm.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          {(() => {
+            const activeCrm = CRM_DEFINITIONS.find((c) => c.id === guideActiveTab) || CRM_DEFINITIONS[0];
+            return (
+              <div className="p-4 rounded-[18px] bg-slate-50 border border-slate-200/80 space-y-3 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: activeCrm.accentColor }} />
+                    {activeCrm.helpTitle}
+                  </h4>
+                  <a
+                    href={activeCrm.docUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    Official Docs <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <div className="p-2.5 rounded-[12px] bg-white border border-slate-200 text-slate-700 space-y-1">
+                  <span className="font-semibold text-slate-800">Key Type: </span>
+                  <code className="text-blue-700 font-mono font-bold bg-blue-50 px-1.5 py-0.5 rounded">
+                    {activeCrm.keyLabel.replace('*', '').trim()}
+                  </code>
+                </div>
+
+                <ol className="space-y-1.5 list-decimal list-inside text-slate-700 leading-relaxed">
+                  {activeCrm.helpSteps.map((step, idx) => (
+                    <li key={idx} className="pl-1">
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+
+                <div className="pt-2 flex flex-wrap items-center gap-2 border-t border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-600">Required Scopes:</span>
+                  {activeCrm.scopes.map((s, i) => (
+                    <span key={i} className="font-mono text-[10px] bg-white border border-slate-200 px-2 py-0.5 rounded-full text-slate-600">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </FrostedGlassCard>
+      )}
+
+      {/* Row 1: Mailbox & Calendar Integrations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Category 1: Outbound Mailboxes */}
         <FrostedGlassCard elevated className="p-6 flex flex-col justify-between space-y-5">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="w-10 h-10 rounded-[16px] bg-red-50 text-red-600 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-[16px] bg-red-50 text-red-600 flex items-center justify-center shadow-xs">
                 <Mail className="w-5 h-5" />
               </div>
               <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700">
@@ -285,9 +558,9 @@ export const IntegrationsView: React.FC = () => {
             </div>
 
             {/* List of Connected Mailboxes */}
-            <div className="space-y-2 pt-1">
+            <div className="space-y-2 pt-1 max-h-[160px] overflow-y-auto">
               {mailboxes.length === 0 ? (
-                <div className="p-3.5 rounded-[14px] bg-slate-50 border border-slate-200/60 text-xs text-slate-400 text-center">
+                <div className="p-3 rounded-[14px] bg-slate-50 border border-slate-200/60 text-xs text-slate-400 text-center">
                   No mailboxes connected yet.
                 </div>
               ) : (
@@ -322,15 +595,15 @@ export const IntegrationsView: React.FC = () => {
             className="w-full flex items-center justify-center gap-1.5 shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            Connect Outbound Mailbox
+            Connect Mailbox
           </SquircleButton>
         </FrostedGlassCard>
 
-        {/* Category 2: Calendar Booking */}
+        {/* Category 2: Host Calendar Engine */}
         <FrostedGlassCard elevated className="p-6 flex flex-col justify-between space-y-5">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="w-10 h-10 rounded-[16px] bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-[16px] bg-blue-50 text-blue-600 flex items-center justify-center shadow-xs">
                 <Calendar className="w-5 h-5" />
               </div>
               <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700">
@@ -340,17 +613,17 @@ export const IntegrationsView: React.FC = () => {
 
             <div>
               <h3 className="text-base font-bold text-[var(--text-primary)]">
-                Calendar Availability Engine
+                Host Calendar Engine
               </h3>
               <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
-                Google Calendar and Microsoft Outlook Graph API for autonomous availability resolution, 15-min buffers, and atomic slot locks.
+                Connect Google Calendar or Microsoft Outlook for real-time free/busy slot computation and autonomous meeting bookings.
               </p>
             </div>
 
             {/* List of Connected Calendars */}
-            <div className="space-y-2 pt-1">
+            <div className="space-y-2 pt-1 max-h-[160px] overflow-y-auto">
               {calendars.length === 0 ? (
-                <div className="p-3.5 rounded-[14px] bg-slate-50 border border-slate-200/60 text-xs text-slate-400 text-center">
+                <div className="p-3 rounded-[14px] bg-slate-50 border border-slate-200/60 text-xs text-slate-400 text-center">
                   No calendars connected yet.
                 </div>
               ) : (
@@ -361,9 +634,13 @@ export const IntegrationsView: React.FC = () => {
                   >
                     <div className="truncate">
                       <p className="font-semibold text-slate-800 truncate">{c.account_email}</p>
-                      <p className="text-[10px] text-emerald-600 font-semibold">{c.provider} • Active</p>
+                      <p className="text-[10px] text-slate-400">
+                        {c.provider} • {c.sync_status}
+                      </p>
                     </div>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span className="px-2 py-0.5 text-[10px] rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-bold">
+                      Active
+                    </span>
                   </div>
                 ))
               )}
@@ -380,111 +657,153 @@ export const IntegrationsView: React.FC = () => {
             Connect Host Calendar
           </SquircleButton>
         </FrostedGlassCard>
+      </div>
 
-        {/* Category 3: HubSpot CRM */}
-        <FrostedGlassCard elevated className="p-6 flex flex-col justify-between space-y-5">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="w-10 h-10 rounded-[16px] bg-orange-50 text-orange-600 flex items-center justify-center">
-                <Database className="w-5 h-5" />
-              </div>
-              <span
-                className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                  crmConnections.length > 0 && crmConnections[0].sync_status === 'CONNECTED'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : crmConnections.length > 0 && crmConnections[0].sync_status === 'SYNCING'
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200 animate-pulse'
-                    : crmConnections.length > 0 && crmConnections[0].sync_status === 'ERROR'
-                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                    : 'bg-slate-100 text-slate-600'
-                }`}
+      {/* Row 2: Enterprise CRM Integrators Suite (HubSpot, Salesforce, Pipedrive, Zoho) */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
+              <Database className="w-5 h-5 text-[var(--accent-primary)]" />
+              Enterprise CRM Integrators Suite
+            </h3>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Bi-directional contact syncing, 10 Canonical Groups mapping, and automated SDR qualification write-backs.
+            </p>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>AES-256-GCM Envelope Encryption</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          {CRM_DEFINITIONS.map((def) => {
+            const activeConn = crmConnections.find((c) => c.provider === def.id);
+            const isSyncing = isSyncingCrm === activeConn?.id || activeConn?.sync_status === 'SYNCING';
+
+            return (
+              <FrostedGlassCard
+                key={def.id}
+                elevated
+                className="p-5 flex flex-col justify-between space-y-4 border-white/80"
               >
-                {crmConnections.length > 0 ? crmConnections[0].sync_status : 'Not Connected'}
-              </span>
-            </div>
-
-            <div>
-              <h3 className="text-base font-bold text-[var(--text-primary)]">
-                HubSpot CRM Integration
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
-                Bi-directional contact syncing, field-level deduplication mapping, and automated NFAT qualification write-backs.
-              </p>
-            </div>
-
-            {crmConnections.length > 0 ? (
-              <div className="space-y-2">
-                <div className="p-3.5 rounded-[14px] bg-white/80 border border-white text-xs space-y-2">
+                <div className="space-y-3">
+                  {/* Top Bar */}
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Account:</span>
-                    <span className="font-bold text-slate-800">{crmConnections[0].account_name || crmConnections[0].account_id || 'HubSpot Portal'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Last Synced:</span>
-                    <span className="font-mono text-slate-700 text-[11px]">
-                      {crmConnections[0].last_sync_at
-                        ? new Date(crmConnections[0].last_sync_at).toLocaleString()
-                        : 'Never'}
+                    <div
+                      className={`w-10 h-10 rounded-[14px] ${def.badgeBg} ${def.badgeText} flex items-center justify-center font-bold text-sm shadow-xs`}
+                    >
+                      {def.id.slice(0, 2)}
+                    </div>
+
+                    <span
+                      className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold border ${
+                        activeConn && activeConn.sync_status === 'CONNECTED'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : isSyncing
+                          ? 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse'
+                          : activeConn && activeConn.sync_status === 'ERROR'
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {activeConn ? activeConn.sync_status : 'Not Connected'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Field Mapping:</span>
-                    <span className="font-bold text-slate-800">10 Canonical Groups</span>
+
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">{def.name}</h4>
+                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                      {def.description}
+                    </p>
                   </div>
+
+                  {activeConn ? (
+                    <div className="p-3 rounded-[12px] bg-white/80 border border-slate-200/80 text-[11px] space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Account:</span>
+                        <span className="font-bold text-slate-800 truncate max-w-[120px]">
+                          {activeConn.account_name || activeConn.account_id || `${def.name} Portal`}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Last Synced:</span>
+                        <span className="font-mono text-slate-700 text-[10px]">
+                          {activeConn.last_sync_at
+                            ? new Date(activeConn.last_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : 'Pending'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Mapping:</span>
+                        <span className="font-bold text-emerald-700">10 Groups</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-[12px] bg-slate-50 border border-slate-200/60 text-[11px] space-y-1 text-slate-500">
+                      <div className="flex items-center justify-between">
+                        <span>Key Required:</span>
+                        <span className="font-semibold text-slate-700">API Token</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Sync Engine:</span>
+                        <span className="font-mono text-slate-700">REST v3/v1</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2 pt-1">
+                {/* Card Actions */}
+                {activeConn ? (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center gap-1.5">
+                      <SquircleButton
+                        variant="outline"
+                        size="sm"
+                        disabled={isSyncing}
+                        onClick={() => handleTriggerSync(activeConn.id)}
+                        className="flex-1 text-[11px] font-bold py-1.5 flex items-center justify-center gap-1"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                        Sync
+                      </SquircleButton>
+
+                      <SquircleButton
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewErrors(activeConn.id)}
+                        className="text-[11px] font-bold py-1.5 px-2 flex items-center gap-1 text-slate-600"
+                        title="View sync errors"
+                      >
+                        <FileText className="w-3 h-3 text-amber-500" />
+                        {activeConn.sync_errors_json?.length || 0}
+                      </SquircleButton>
+
+                      <button
+                        onClick={() => handleDisconnectCrm(activeConn.id, def.name)}
+                        className="p-2 text-slate-400 hover:text-rose-600 rounded-[10px] hover:bg-rose-50 transition-colors"
+                        title="Disconnect CRM"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                   <SquircleButton
-                    variant="outline"
+                    variant="primary"
                     size="sm"
-                    disabled={isSyncingCrm || crmConnections[0].sync_status === 'SYNCING'}
-                    onClick={() => handleTriggerSync(crmConnections[0].id)}
-                    className="flex-1 text-[11px] font-bold py-2 flex items-center justify-center gap-1.5"
+                    onClick={() => handleOpenCrmModal(def.id)}
+                    className="w-full text-xs flex items-center justify-center gap-1.5 shadow-xs"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCrm || crmConnections[0].sync_status === 'SYNCING' ? 'animate-spin' : ''}`} />
-                    Sync Now
+                    <Plus className="w-3.5 h-3.5" />
+                    Connect {def.name.split(' ')[0]}
                   </SquircleButton>
-
-                  <SquircleButton
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewErrors(crmConnections[0].id)}
-                    className="text-[11px] font-bold py-2 flex items-center gap-1 text-slate-600 hover:text-slate-900"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-amber-500" />
-                    Errors ({crmConnections[0].sync_errors_json?.length || 0})
-                  </SquircleButton>
-                </div>
-              </div>
-            ) : (
-              <div className="p-3.5 rounded-[14px] bg-slate-50 border border-slate-200/60 text-xs space-y-1">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>Field Mapping Status:</span>
-                  <span className="font-bold text-slate-800">10 Canonical Groups</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>Sync Mechanism:</span>
-                  <span className="font-mono text-slate-800">OAuth2 + Webhooks</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <SquircleButton
-            variant={crmConnections.length > 0 ? 'outline' : 'primary'}
-            size="sm"
-            onClick={() => {
-              if (crmConnections.length > 0) {
-                setNotice('HubSpot CRM connection is active. Re-authentication can be initiated if needed.');
-              } else {
-                setIsCrmModalOpen(true);
-              }
-            }}
-            className="w-full flex items-center justify-center gap-1.5 shadow-sm"
-          >
-            {crmConnections.length > 0 ? 'Manage CRM Connection' : 'Connect HubSpot CRM'}
-          </SquircleButton>
-        </FrostedGlassCard>
+                )}
+              </FrostedGlassCard>
+            );
+          })}
+        </div>
       </div>
 
       {/* Connect Mailbox Modal */}
@@ -626,44 +945,176 @@ export const IntegrationsView: React.FC = () => {
         </form>
       </SquircleModal>
 
-      {/* Connect CRM Modal */}
+      {/* Connect CRM Modal (Multi-CRM Support with Step-by-step Key guidance) */}
       <SquircleModal
         isOpen={isCrmModalOpen}
         onClose={() => setIsCrmModalOpen(false)}
-        title="Connect HubSpot CRM"
-        maxWidth="md"
+        title={`Connect ${currentDef.name}`}
+        maxWidth="lg"
       >
-        <form onSubmit={handleConnectCrm} className="space-y-4 pt-1">
-          <SquircleInput
-            label="HubSpot Private App Token / API Key *"
-            type="password"
-            value={crmApiKey}
-            onChange={(e) => setCrmApiKey(e.target.value)}
-            placeholder="Enter private app token"
-            required
-          />
-
-          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-            Requires scopes: <span className="font-mono text-slate-700">crm.objects.contacts.read, crm.objects.contacts.write</span>. Token will be encrypted at rest with AES-256-GCM envelope encryption.
-          </p>
-
-          <div className="pt-3 flex justify-end gap-3">
-            <SquircleButton
-              variant="outline"
-              type="button"
-              onClick={() => setIsCrmModalOpen(false)}
-            >
-              Cancel
-            </SquircleButton>
-            <SquircleButton
-              variant="primary"
-              type="submit"
-              isLoading={isConnectingCrm}
-            >
-              Authenticate CRM
-            </SquircleButton>
+        <div className="space-y-4 pt-1">
+          {/* CRM Provider Selector Tabs */}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5 block">
+              Select CRM Provider
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {CRM_DEFINITIONS.map((def) => (
+                <button
+                  key={def.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCrmProvider(def.id);
+                    setCrmApiKey('');
+                    setCrmInstanceUrl(def.id === 'ZOHO' ? 'https://www.zohoapis.com' : '');
+                  }}
+                  className={`p-2.5 rounded-[14px] text-xs font-bold border transition-all text-center ${
+                    selectedCrmProvider === def.id
+                      ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)] shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {def.name.split(' ')[0]}
+                </button>
+              ))}
+            </div>
           </div>
-        </form>
+
+          {/* Connection Mode Toggle */}
+          <div className="flex rounded-[12px] bg-slate-100 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setCrmAuthMode('KEY')}
+              className={`flex-1 py-1.5 rounded-[10px] font-bold transition-all ${
+                crmAuthMode === 'KEY'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Direct API Key / Access Token
+            </button>
+            <button
+              type="button"
+              onClick={() => setCrmAuthMode('OAUTH')}
+              className={`flex-1 py-1.5 rounded-[10px] font-bold transition-all ${
+                crmAuthMode === 'OAUTH'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              OAuth 2.0 Login Flow
+            </button>
+          </div>
+
+          {/* Guidance Box for the selected CRM */}
+          <div className="p-3.5 rounded-[16px] bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                {currentDef.helpTitle}
+              </span>
+              <a
+                href={currentDef.docUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              >
+                Docs <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[11px] leading-relaxed">
+              {currentDef.helpSteps.slice(0, 3).map((step, idx) => (
+                <li key={idx}>{step}</li>
+              ))}
+            </ol>
+          </div>
+
+          {crmAuthMode === 'KEY' ? (
+            <form onSubmit={handleConnectCrmDirect} className="space-y-3">
+              {currentDef.requiresInstanceUrl && (
+                <SquircleInput
+                  label={currentDef.instanceUrlLabel || 'Instance URL *'}
+                  type="text"
+                  value={crmInstanceUrl}
+                  onChange={(e) => setCrmInstanceUrl(e.target.value)}
+                  placeholder={currentDef.instanceUrlPlaceholder || 'https://...'}
+                  required
+                />
+              )}
+
+              <SquircleInput
+                label={currentDef.keyLabel}
+                type="password"
+                value={crmApiKey}
+                onChange={(e) => setCrmApiKey(e.target.value)}
+                placeholder={currentDef.keyPlaceholder}
+                required
+              />
+
+              <SquircleInput
+                label="Account Label (Optional)"
+                type="text"
+                value={crmAccountName}
+                onChange={(e) => setCrmAccountName(e.target.value)}
+                placeholder={`My ${currentDef.name} Workspace`}
+              />
+
+              <p className="text-[11px] text-slate-400 leading-relaxed flex items-center gap-1.5 pt-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                Token is securely encrypted at rest using AES-256-GCM envelope encryption.
+              </p>
+
+              <div className="pt-3 flex justify-end gap-3">
+                <SquircleButton
+                  variant="outline"
+                  type="button"
+                  onClick={() => setIsCrmModalOpen(false)}
+                >
+                  Cancel
+                </SquircleButton>
+                <SquircleButton
+                  variant="primary"
+                  type="submit"
+                  isLoading={isConnectingCrm}
+                >
+                  Connect &amp; Sync
+                </SquircleButton>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-4 pt-2">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                You will be redirected to the secure <strong>{currentDef.name}</strong> login portal to grant OAuth authorization. Your tokens will be saved with automatic background refreshing.
+              </p>
+
+              <div className="p-3 rounded-[12px] bg-blue-50/60 border border-blue-200/60 text-xs text-blue-900 space-y-1">
+                <p className="font-semibold">Required Scopes:</p>
+                <p className="font-mono text-[11px] text-blue-800">
+                  {currentDef.scopes.join(', ')}
+                </p>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3">
+                <SquircleButton
+                  variant="outline"
+                  type="button"
+                  onClick={() => setIsCrmModalOpen(false)}
+                >
+                  Cancel
+                </SquircleButton>
+                <SquircleButton
+                  variant="primary"
+                  type="button"
+                  onClick={handleConnectCrmOAuth}
+                  isLoading={isConnectingCrm}
+                >
+                  Continue to {currentDef.name.split(' ')[0]} OAuth
+                </SquircleButton>
+              </div>
+            </div>
+          )}
+        </div>
       </SquircleModal>
 
       {/* Per-Record Sync Errors & Warnings Modal */}

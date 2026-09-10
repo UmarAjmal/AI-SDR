@@ -9,11 +9,29 @@ from packages.common.models.knowledge import BusinessProfile
 from packages.common.encryption import TokenEncryptor
 from packages.crm.base import CRMProvider
 from packages.crm.adapters.hubspot_adapter import HubSpotProvider
+from packages.crm.adapters.salesforce_adapter import SalesforceProvider
+from packages.crm.adapters.pipedrive_adapter import PipedriveProvider
+from packages.crm.adapters.zoho_adapter import ZohoProvider
 from packages.lead_intelligence.scorer import LeadScorer
 
 logger = logging.getLogger("codenter.crm.sync")
 
 class CRMSyncService:
+    @classmethod
+    def get_provider(cls, conn: CRMConnection) -> CRMProvider:
+        field_maps = conn.field_mappings_json or {}
+        if conn.provider == CRMProviderType.HUBSPOT:
+            return HubSpotProvider()
+        elif conn.provider == CRMProviderType.SALESFORCE:
+            instance_url = field_maps.get("instance_url")
+            return SalesforceProvider(instance_url=instance_url)
+        elif conn.provider == CRMProviderType.PIPEDRIVE:
+            return PipedriveProvider()
+        elif conn.provider == CRMProviderType.ZOHO:
+            api_domain = field_maps.get("api_domain")
+            return ZohoProvider(api_domain=api_domain)
+        raise ValueError(f"Provider {conn.provider} adapter not implemented")
+
     @classmethod
     async def sync_connection(
         cls,
@@ -47,7 +65,7 @@ class CRMSyncService:
         # Decrypt tokens
         try:
             access_token = encryptor.decrypt(conn.encrypted_access_token)
-            refresh_token = encryptor.decrypt(conn.encrypted_refresh_token)
+            refresh_token = encryptor.decrypt(conn.encrypted_refresh_token) if conn.encrypted_refresh_token else ""
         except Exception as e:
             logger.error(f"Failed to decrypt credentials for CRM connection {conn.id}: {e}")
             conn.sync_status = CRMSyncStatus.ERROR
@@ -57,11 +75,11 @@ class CRMSyncService:
 
         # Instantiate provider if not passed
         if provider is None:
-            if conn.provider == CRMProviderType.HUBSPOT:
-                provider = HubSpotProvider()
-            else:
+            try:
+                provider = cls.get_provider(conn)
+            except Exception as e:
                 conn.sync_status = CRMSyncStatus.ERROR
-                conn.sync_error_message = f"Provider {conn.provider} adapter not implemented"
+                conn.sync_error_message = str(e)
                 await db.commit()
                 return conn
 
@@ -316,25 +334,52 @@ class CRMSyncService:
             return False
 
         if provider is None:
-            if conn.provider == CRMProviderType.HUBSPOT:
-                provider = HubSpotProvider()
-            else:
+            try:
+                provider = cls.get_provider(conn)
+            except Exception as e:
+                logger.error(f"Cannot resolve provider for CRM connection {conn.id}: {e}")
                 return False
 
         payload: dict[str, Any] = {}
-        if lead.opt_out or lead.do_not_contact:
-            payload["hs_email_optout"] = "true"
-        if lead.meeting_booked:
-            payload["hs_lead_status"] = "CONNECTED"
-            payload["lifecyclestage"] = "salesqualifiedlead"
-        elif lead.is_qualified:
-            payload["hs_lead_status"] = "QUALIFIED"
-            payload["lifecyclestage"] = "marketingqualifiedlead"
-        elif lead.disqualified:
-            payload["hs_lead_status"] = "UNQUALIFIED"
-
-        if lead.lead_notes:
-            payload["notes_last_contacted"] = datetime.now(timezone.utc).isoformat()
+        if conn.provider == CRMProviderType.HUBSPOT:
+            if lead.opt_out or lead.do_not_contact:
+                payload["hs_email_optout"] = "true"
+            if lead.meeting_booked:
+                payload["hs_lead_status"] = "CONNECTED"
+                payload["lifecyclestage"] = "salesqualifiedlead"
+            elif lead.is_qualified:
+                payload["hs_lead_status"] = "QUALIFIED"
+                payload["lifecyclestage"] = "marketingqualifiedlead"
+            elif lead.disqualified:
+                payload["hs_lead_status"] = "UNQUALIFIED"
+            if lead.lead_notes:
+                payload["notes_last_contacted"] = datetime.now(timezone.utc).isoformat()
+        elif conn.provider == CRMProviderType.SALESFORCE:
+            if lead.opt_out or lead.do_not_contact:
+                payload["HasOptedOutOfEmail"] = True
+                payload["DoNotCall"] = True
+            if lead.meeting_booked:
+                payload["Status"] = "Closed - Converted"
+            elif lead.is_qualified:
+                payload["Status"] = "Working - Contacted"
+            elif lead.disqualified:
+                payload["Status"] = "Closed - Not Converted"
+            if lead.lead_notes:
+                payload["Description"] = lead.lead_notes
+        elif conn.provider == CRMProviderType.PIPEDRIVE:
+            if lead.opt_out or lead.do_not_contact:
+                payload["marketing_status"] = "opted_out"
+        elif conn.provider == CRMProviderType.ZOHO:
+            if lead.opt_out or lead.do_not_contact:
+                payload["Email_Opt_Out"] = True
+            if lead.meeting_booked:
+                payload["Lead_Status"] = "Contacted"
+            elif lead.is_qualified:
+                payload["Lead_Status"] = "Pre-Qualified"
+            elif lead.disqualified:
+                payload["Lead_Status"] = "Lost Lead"
+            if lead.lead_notes:
+                payload["Description"] = lead.lead_notes
 
         try:
             success = await provider.update_contact(

@@ -28,6 +28,27 @@ class CRMOAuthCallbackRequest(BaseModel):
     state: str
     redirect_uri: str
 
+class CRMDirectConnectRequest(BaseModel):
+    provider: CRMProviderType
+    api_key: str
+    account_name: Optional[str] = None
+    account_id: Optional[str] = None
+    instance_url: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    refresh_token: Optional[str] = None
+
+class CRMCredentialInfo(BaseModel):
+    provider: CRMProviderType
+    display_name: str
+    auth_type: str
+    key_name: str
+    key_placeholder: str
+    documentation_url: str
+    description: str
+    scopes_required: list[str]
+    setup_steps: list[str]
+
 class ScoreReasonSchema(BaseModel):
     category: str
     points: float
