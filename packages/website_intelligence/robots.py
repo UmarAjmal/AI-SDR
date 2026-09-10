@@ -11,6 +11,11 @@ class RobotsParser:
         self.parser = urllib.robotparser.RobotFileParser()
         self.crawl_delay = 0.5
 
+    HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/plain,*/*;q=0.8"
+    }
+
     async def fetch_and_parse(self, base_url: str, client: httpx.AsyncClient | None = None) -> bool:
         """
         Fetches robots.txt for the given base_url.
@@ -20,7 +25,7 @@ class RobotsParser:
 
         owns_client = False
         if client is None:
-            client = httpx.AsyncClient(timeout=10.0, follow_redirects=True)
+            client = httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers=self.HEADERS)
             owns_client = True
 
         try:
@@ -32,7 +37,7 @@ class RobotsParser:
                     self.crawl_delay = max(delay, 0.5)
                 return True
             else:
-                # If 404, standard convention is crawling is permitted
+                # If 404 or any other non-200, convention is crawling is permitted
                 self.parser.allow_all = True
                 return True
         except Exception as e:
@@ -44,4 +49,16 @@ class RobotsParser:
                 await client.aclose()
 
     def can_fetch(self, url: str) -> bool:
-        return self.parser.can_fetch(self.user_agent, url)
+        # Base homepage is always allowed for business grounding
+        parsed = urllib.parse.urlparse(url)
+        if parsed.path.rstrip("/") == "":
+            return True
+
+        if getattr(self.parser, "allow_all", False):
+            return True
+
+        # Check for specific user agent or wildcard
+        allowed = self.parser.can_fetch(self.user_agent, url)
+        if not allowed:
+            allowed = self.parser.can_fetch("*", url)
+        return allowed

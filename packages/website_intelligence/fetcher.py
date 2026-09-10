@@ -22,7 +22,7 @@ class FetchedPage:
         self.screenshot_url = screenshot_url
 
 class HybridPageFetcher:
-    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 CodenterBot/1.0"
+    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     
     HEADERS = {
         "User-Agent": USER_AGENT,
@@ -46,7 +46,7 @@ class HybridPageFetcher:
     async def fetch(cls, url: str, client: httpx.AsyncClient | None = None) -> FetchedPage:
         owns_client = False
         if client is None:
-            client = httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=cls.HEADERS)
+            client = httpx.AsyncClient(timeout=20.0, follow_redirects=True, headers=cls.HEADERS)
             owns_client = True
 
         try:

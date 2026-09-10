@@ -58,11 +58,24 @@ class WebsiteCrawlerService:
                 u for u, prio in discovered if robots.can_fetch(u)
             ][:cls.MAX_PAGES_TO_CRAWL]
 
-            # 4. Crawl prioritized pages
+            # Guarantee that base_url is always included in target URLs
+            if not target_urls or normalized_base not in target_urls:
+                target_urls.insert(0, normalized_base)
+            target_urls = target_urls[:cls.MAX_PAGES_TO_CRAWL]
+
+            # 4. Crawl prioritized pages with dynamic internal link discovery
             scan.status = ScanStatus.CRAWLING
             await db.commit()
 
-            for url in target_urls:
+            visited: set[str] = set()
+            idx = 0
+            while idx < len(target_urls) and len(crawled_pages) < cls.MAX_PAGES_TO_CRAWL:
+                url = target_urls[idx]
+                idx += 1
+                if url in visited:
+                    continue
+                visited.add(url)
+
                 try:
                     page = await HybridPageFetcher.fetch(url, client=client)
                     crawled_pages.append(page)
@@ -71,7 +84,7 @@ class WebsiteCrawlerService:
                     doc = KnowledgeDocument(
                         workspace_id=workspace_id,
                         url=page.url,
-                        title=page.cleaned.title,
+                        title=page.cleaned.title or "Web Page",
                         content_hash=page.cleaned.content_hash,
                         source_type="WEBSITE",
                         raw_text=page.cleaned.text,
@@ -95,10 +108,25 @@ class WebsiteCrawlerService:
                         )
                         db.add(k_chunk)
 
+                    # Dynamic internal link discovery from page content
+                    if len(target_urls) < cls.MAX_PAGES_TO_CRAWL:
+                        for in_link in page.cleaned.internal_links:
+                            norm_in = URLNormalizer.normalize(in_link)
+                            if (
+                                URLNormalizer.is_same_domain(normalized_base, norm_in)
+                                and norm_in not in visited
+                                and norm_in not in target_urls
+                            ):
+                                if robots.can_fetch(norm_in):
+                                    target_urls.append(norm_in)
+                                    if len(target_urls) >= cls.MAX_PAGES_TO_CRAWL:
+                                        break
+
                 except Exception as e:
                     logger.warning(f"Failed crawling page {url}: {e}")
                     failed_count += 1
 
+            scan.pages_discovered = max(scan.pages_discovered, len(target_urls), len(visited))
             scan.pages_crawled = len(crawled_pages)
             scan.pages_failed = failed_count
 
