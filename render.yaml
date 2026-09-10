@@ -1,0 +1,29 @@
+services:
+  # -------------------------------------------------------------
+  # 1. FastAPI REST API Web Service
+  # -------------------------------------------------------------
+  - type: web
+    name: codenter-ai-sdr-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        value: "redis://localhost:6379/0"
+      - key: CORS_ORIGINS
+        value: '["https://*.vercel.app","http://localhost:5173"]'

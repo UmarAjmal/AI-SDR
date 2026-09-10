@@ -1,5 +1,6 @@
+from typing import Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -19,6 +20,18 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_db_url(cls, v: Any) -> str:
+        if isinstance(v, str):
+            clean_v = v.strip()
+            if clean_v.startswith("postgres://"):
+                return clean_v.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif clean_v.startswith("postgresql://") and not clean_v.startswith("postgresql+asyncpg://"):
+                return clean_v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return clean_v
+        return v
+
     # Redis & Celery
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
     CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/1")
@@ -35,5 +48,19 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            v_str = v.strip()
+            if v_str.startswith("[") and v_str.endswith("]"):
+                import json
+                try:
+                    return json.loads(v_str)
+                except Exception:
+                    pass
+            return [orig.strip() for orig in v_str.split(",") if orig.strip()]
+        return v
 
 settings = Settings()
