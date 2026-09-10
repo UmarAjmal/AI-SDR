@@ -86,6 +86,11 @@ function Start-FrontendServer {
     }
 
     $webDir = Join-Path $ScriptDir "apps\web"
+    $viteCache = Join-Path $webDir "node_modules\.vite"
+    if (Test-Path $viteCache) {
+        Remove-Item -Recurse -Force $viteCache -ErrorAction SilentlyContinue
+    }
+
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
     $startInfo.FileName = "cmd.exe"
     $startInfo.Arguments = "/c `"cd /d `"$webDir`" && npm run dev > `"$FrontendLog`" 2>&1`""

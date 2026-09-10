@@ -42,6 +42,18 @@ app.include_router(webhooks.router, prefix=settings.API_V1_STR)
 app.include_router(calendar.router, prefix=settings.API_V1_STR)
 app.include_router(analytics.router, prefix=settings.API_V1_STR)
 
+@app.get("/", tags=["System"])
+async def root():
+    return {
+        "status": "online",
+        "app": settings.APP_NAME,
+        "version": "1.0.0",
+        "environment": settings.APP_ENV,
+        "docs_url": "http://127.0.0.1:8000/docs",
+        "api_v1_prefix": settings.API_V1_STR,
+        "frontend_url": "http://localhost:5173"
+    }
+
 @app.get("/healthz", tags=["System"])
 async def healthz():
     return {

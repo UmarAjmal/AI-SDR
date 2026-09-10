@@ -62,6 +62,7 @@ echo -------------------------------------------------------
 echo Starting Vite Frontend (Port 5173)...
 echo -------------------------------------------------------
 call :KILL_PORT 5173
+if exist "apps\web\node_modules\.vite" rmdir /s /q "apps\web\node_modules\.vite" >nul 2>&1
 start "Codenter AI SDR - Frontend" /min cmd /c "cd apps\web && npm run dev > ..\..\.run\frontend.log 2>&1"
 timeout /t 3 /nobreak >nul
 echo Frontend is running:
@@ -82,6 +83,7 @@ call :KILL_PORT 5173
 set PYTHON_CMD=.venv\Scripts\python.exe
 if not exist "%PYTHON_CMD%" set PYTHON_CMD=python
 
+if exist "apps\web\node_modules\.vite" rmdir /s /q "apps\web\node_modules\.vite" >nul 2>&1
 start "Codenter AI SDR - Backend" /min cmd /c "%PYTHON_CMD% -m uvicorn apps.api.main:app --host 127.0.0.1 --port 8000 --reload > .run\backend.log 2>&1"
 start "Codenter AI SDR - Frontend" /min cmd /c "cd apps\web && npm run dev > ..\..\.run\frontend.log 2>&1"
 
