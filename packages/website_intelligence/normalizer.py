@@ -47,7 +47,10 @@ class URLNormalizer:
     @classmethod
     def extract_domain(cls, url: str) -> str:
         parsed = urllib.parse.urlparse(cls.normalize(url))
-        return parsed.netloc
+        dom = parsed.netloc
+        if dom.startswith("www."):
+            dom = dom[4:]
+        return dom
 
     @classmethod
     def is_same_domain(cls, url1: str, url2: str) -> bool:

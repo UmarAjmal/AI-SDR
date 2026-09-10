@@ -50,9 +50,9 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
     settings: 'Settings',
   };
 
-  const handleSelectWorkspace = (_id: string, name: string) => {
+  const handleSelectWorkspace = (_id: string, name: string, targetTab?: ConsoleTab) => {
     setActiveWorkspaceName(name);
-    setActiveTab('overview');
+    setActiveTab(targetTab || 'overview');
   };
 
   return (

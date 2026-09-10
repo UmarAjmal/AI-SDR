@@ -15,6 +15,7 @@ class Workspace(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    website_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     settings: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
     # Relationships
