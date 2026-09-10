@@ -172,9 +172,6 @@ export const InboxView: React.FC = () => {
             <Mail className="w-6 h-6 text-[var(--accent-primary)]" />
             Email Infrastructure & Split-Pane Inbox
           </h1>
-          <p className="text-xs text-[var(--text-secondary)] mt-1">
-            RFC 2822 threading, daily deliverability quotas, anti-burst pacing, and DOMPurify sanitized inbox.
-          </p>
         </div>
 
         <div className="flex items-center gap-2 bg-white/60 backdrop-blur-md p-1 rounded-[16px] border border-white/80 shadow-sm">

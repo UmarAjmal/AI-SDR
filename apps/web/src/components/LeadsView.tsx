@@ -214,15 +214,9 @@ export const LeadsView: React.FC = () => {
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">
             Canonical Lead Intelligence
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
-              Deterministic 0–100 ICP Scored
-            </span>
           </h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Section 5 CRM Integration &amp; Section 9 NFAT AI Qualification Engine with Bi-directional Sync.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">

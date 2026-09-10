@@ -263,11 +263,6 @@ export const CampaignsView: React.FC = () => {
                 </span>
               )}
             </div>
-            <p className="text-xs text-[var(--text-secondary)] mt-1">
-              {currentCampaign
-                ? `Objective: ${currentCampaign.objective} • ${currentCampaign.steps?.length || 0} Sequence Steps • Total Leads: ${currentCampaign.total_leads || 0}`
-                : 'Section 6 Deterministic State Machine, Business Hours Dispatch & Celery Scheduler'}
-            </p>
           </div>
 
           <div className="flex items-center gap-2.5">

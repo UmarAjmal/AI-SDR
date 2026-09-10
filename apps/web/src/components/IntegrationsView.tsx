@@ -173,15 +173,9 @@ export const IntegrationsView: React.FC = () => {
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] flex items-center gap-2">
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
             Third-Party Integrations &amp; OAuth Adapters
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
-              AES-256 Encrypted
-            </span>
           </h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Section 1.3 Recommended V1 Integrations: HubSpot CRM, Google Workspace, Microsoft 365 &amp; Calendars.
-          </p>
         </div>
 
         <SquircleButton

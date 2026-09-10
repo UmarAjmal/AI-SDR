@@ -186,15 +186,9 @@ export const KnowledgeView: React.FC = () => {
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] flex items-center gap-2">
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
             Website Intelligence &amp; Knowledge Base
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[var(--accent-subtle)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
-              pgvector Grounded
-            </span>
           </h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Section 4 Website Intelligence: Playwright automated headless crawl, fact extraction, and anti-hallucination context.
-          </p>
         </div>
 
         {profile && (

@@ -86,15 +86,9 @@ export const SettingsView: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] flex items-center gap-2">
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
             Workspace Governance &amp; Safeguards
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-              Multi-Tenant Isolated
-            </span>
           </h2>
-          <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Section 11 &amp; 12: Configure delivery caps, randomized jitter pacing (120–300s), spending limits, and multi-tenant tenant boundary.
-          </p>
         </div>
 
         <SquircleButton

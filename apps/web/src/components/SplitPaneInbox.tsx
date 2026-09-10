@@ -156,15 +156,9 @@ export const SplitPaneInbox: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] flex items-center gap-2">
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
             Human-in-the-Loop Split-Pane Inbox
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              14-Intent Grounded
-            </span>
           </h2>
-          <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Review incoming prospect replies, inspect confidence scores, verify citations, and approve outbound drafts.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">

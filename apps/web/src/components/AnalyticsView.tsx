@@ -216,17 +216,9 @@ export const AnalyticsView: React.FC = () => {
       {/* Top Banner & Control Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-              Sales Funnel & AI Telemetry
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Live Real-Time
-            </span>
-          </div>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            End-to-end 7-stage conversion funnel, token metering, and immutable 5-question audit provenance.
-          </p>
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+            Sales Funnel & AI Telemetry
+          </h2>
         </div>
 
         <div className="flex items-center gap-3">

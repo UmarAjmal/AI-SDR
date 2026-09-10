@@ -206,9 +206,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
             Executive Overview &amp; Golden Loop
           </h2>
-          <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Section 17.2: Telemetry monitoring, conversion funnel metrics, and AI deliverability safeguards.
-          </p>
         </div>
 
         <div className="flex items-center gap-2.5">

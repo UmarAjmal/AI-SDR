@@ -179,15 +179,9 @@ export const CalendarView: React.FC = () => {
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] flex items-center gap-2">
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
             Autonomous Calendar &amp; Meeting Booking
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Concurrency-Safe Locking
-            </span>
           </h2>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Section 10 Meeting Booking: Auto-stop sequence on confirmation, dynamic prospect timezone conversion, and 15-min buffers.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
