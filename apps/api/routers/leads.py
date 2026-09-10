@@ -12,7 +12,8 @@ from packages.common.schemas.crm import (
     CRMLeadResponse,
     CRMLeadListResponse,
     CRMLeadUpdateRequest,
-    CRMLeadCreateRequest
+    CRMLeadCreateRequest,
+    CRMLeadOutcomeUpdateRequest
 )
 from packages.common.models.knowledge import BusinessProfile
 from packages.lead_intelligence.scorer import LeadScorer
@@ -317,6 +318,74 @@ async def trigger_lead_qualification(
             )
         except Exception:
             pass
+
+    return lead
+
+@router.post("/{lead_id}/outcome", response_model=CRMLeadResponse)
+async def update_lead_outcome(
+    lead_id: str,
+    payload: CRMLeadOutcomeUpdateRequest,
+    ctx: WorkspaceContext = Depends(require_role([WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.MEMBER])),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Updates canonical lead outcome states: meeting_booked, is_qualified, disqualified, handoff_required.
+    Triggers bidirectional CRM sync-back to reflect state in connected CRM.
+    """
+    res = await db.execute(
+        select(CRMLead).where(
+            CRMLead.id == lead_id,
+            CRMLead.workspace_id == ctx.workspace_id
+        )
+    )
+    lead = res.scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    if payload.meeting_booked is not None:
+        lead.meeting_booked = payload.meeting_booked
+        if payload.meeting_booked:
+            lead.qualification_status = "QUALIFIED"
+            lead.is_qualified = True
+    if payload.is_qualified is not None:
+        lead.is_qualified = payload.is_qualified
+        if payload.is_qualified:
+            lead.qualification_status = "QUALIFIED"
+    if payload.disqualified is not None:
+        lead.disqualified = payload.disqualified
+        if payload.disqualified:
+            lead.qualification_status = "DISQUALIFIED"
+            lead.is_qualified = False
+    if payload.handoff_required is not None:
+        lead.handoff_required = payload.handoff_required
+    if payload.qualification_status is not None:
+        lead.qualification_status = payload.qualification_status.upper()
+        lead.is_qualified = (lead.qualification_status == "QUALIFIED")
+
+    await db.commit()
+    await db.refresh(lead)
+
+    # Trigger async CRM sync-back
+    try:
+        sync_lead_outcome_to_crm_task.delay(
+            workspace_id=ctx.workspace_id,
+            lead_id=str(lead.id)
+        )
+    except Exception:
+        async def _run_local_sync_back():
+            try:
+                from packages.crm.sync_service import CRMSyncService
+                from apps.api.core.database import AsyncSessionLocal
+                async with AsyncSessionLocal() as session:
+                    await CRMSyncService.sync_lead_back_to_crm(
+                        workspace_id=ctx.workspace_id,
+                        lead_id=str(lead.id),
+                        db=session
+                    )
+            except Exception:
+                pass
+        import asyncio
+        asyncio.create_task(_run_local_sync_back())
 
     return lead
 

@@ -9,6 +9,8 @@ import {
   Plus,
   Trash2,
   Sparkles,
+  AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import { FrostedGlassCard } from './ui/FrostedGlassCard';
 import { SquircleButton } from './ui/SquircleButton';
@@ -31,11 +33,28 @@ interface CalendarConn {
   sync_status: string;
 }
 
+interface CRMConn {
+  id: string;
+  provider: string;
+  account_id?: string;
+  account_name?: string;
+  sync_status: 'CONNECTED' | 'SYNCING' | 'ERROR' | 'REVOKED';
+  last_sync_at?: string;
+  sync_error_message?: string;
+  sync_errors_json?: Array<{
+    record_id?: string;
+    email?: string;
+    error: string;
+    timestamp: string;
+  }>;
+}
+
 export const IntegrationsView: React.FC = () => {
   const [mailboxes, setMailboxes] = useState<MailboxAccount[]>([]);
   const [calendars, setCalendars] = useState<CalendarConn[]>([]);
-  const [isHubSpotConnected, setIsHubSpotConnected] = useState(false);
+  const [crmConnections, setCrmConnections] = useState<CRMConn[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncingCrm, setIsSyncingCrm] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Connect Mailbox Modal
@@ -58,12 +77,18 @@ export const IntegrationsView: React.FC = () => {
   const [crmApiKey, setCrmApiKey] = useState('');
   const [isConnectingCrm, setIsConnectingCrm] = useState(false);
 
+  // Per-Record Sync Errors Modal
+  const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
+  const [selectedCrmErrors, setSelectedCrmErrors] = useState<any[]>([]);
+  const [errorModalConnId, setErrorModalConnId] = useState<string | null>(null);
+
   const fetchIntegrations = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [emailRes, calRes] = await Promise.allSettled([
+      const [emailRes, calRes, crmRes] = await Promise.allSettled([
         axios.get('/api/v1/email/accounts'),
         axios.get('/api/v1/calendar/connections'),
+        axios.get('/api/v1/integrations/crm/connections'),
       ]);
 
       if (emailRes.status === 'fulfilled') {
@@ -71,6 +96,9 @@ export const IntegrationsView: React.FC = () => {
       }
       if (calRes.status === 'fulfilled') {
         setCalendars(calRes.value.data || []);
+      }
+      if (crmRes.status === 'fulfilled') {
+        setCrmConnections(crmRes.value.data || []);
       }
     } catch (err) {
       console.error('Failed to load integrations:', err);
@@ -150,21 +178,51 @@ export const IntegrationsView: React.FC = () => {
     }
   };
 
-  // Handle CRM Connection
+  // Handle CRM Connection via OAuth
   const handleConnectCrm = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsConnectingCrm(true);
     try {
-      // Simulate OAuth / API connection
-      setIsHubSpotConnected(true);
-      setNotice('HubSpot CRM connected with bi-directional contact synchronization.');
-      setIsCrmModalOpen(false);
-      setCrmApiKey('');
+      const redirectUri = window.location.origin + '/integrations';
+      const authRes = await axios.post(
+        `/api/v1/integrations/crm/HUBSPOT/connect?redirect_uri=${encodeURIComponent(redirectUri)}`
+      );
+      if (authRes.data?.authorization_url) {
+        setNotice('Redirecting to HubSpot OAuth authorization portal...');
+        window.location.href = authRes.data.authorization_url;
+      }
     } catch (err: any) {
-      setNotice('Failed to connect CRM.');
+      setNotice(err.response?.data?.detail || 'Failed to initiate HubSpot OAuth flow.');
     } finally {
       setIsConnectingCrm(false);
       setTimeout(() => setNotice(null), 4000);
+    }
+  };
+
+  // Trigger On-Demand CRM Sync
+  const handleTriggerSync = async (connId: string) => {
+    setIsSyncingCrm(true);
+    try {
+      await axios.post(`/api/v1/integrations/crm/${connId}/sync`);
+      setNotice('CRM synchronization initiated in background!');
+      await fetchIntegrations();
+    } catch (err: any) {
+      setNotice(err.response?.data?.detail || 'Failed to trigger CRM sync.');
+    } finally {
+      setIsSyncingCrm(false);
+      setTimeout(() => setNotice(null), 4000);
+    }
+  };
+
+  // Fetch Per-Record Sync Errors
+  const handleViewErrors = async (connId: string) => {
+    setErrorModalConnId(connId);
+    try {
+      const res = await axios.get(`/api/v1/integrations/crm/${connId}/errors`);
+      setSelectedCrmErrors(res.data?.errors || []);
+      setIsErrorModalOpen(true);
+    } catch (err: any) {
+      console.error('Failed to load CRM sync errors:', err);
     }
   };
 
@@ -332,10 +390,16 @@ export const IntegrationsView: React.FC = () => {
               </div>
               <span
                 className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                  isHubSpotConnected ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                  crmConnections.length > 0 && crmConnections[0].sync_status === 'CONNECTED'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : crmConnections.length > 0 && crmConnections[0].sync_status === 'SYNCING'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200 animate-pulse'
+                    : crmConnections.length > 0 && crmConnections[0].sync_status === 'ERROR'
+                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                    : 'bg-slate-100 text-slate-600'
                 }`}
               >
-                {isHubSpotConnected ? 'Connected' : 'Not Connected'}
+                {crmConnections.length > 0 ? crmConnections[0].sync_status : 'Not Connected'}
               </span>
             </div>
 
@@ -348,32 +412,77 @@ export const IntegrationsView: React.FC = () => {
               </p>
             </div>
 
-            <div className="p-3.5 rounded-[14px] bg-slate-50 border border-slate-200/60 text-xs space-y-1">
-              <div className="flex items-center justify-between text-slate-600">
-                <span>Field Mapping Status:</span>
-                <span className="font-bold text-slate-800">10 Canonical Groups</span>
+            {crmConnections.length > 0 ? (
+              <div className="space-y-2">
+                <div className="p-3.5 rounded-[14px] bg-white/80 border border-white text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-medium">Account:</span>
+                    <span className="font-bold text-slate-800">{crmConnections[0].account_name || crmConnections[0].account_id || 'HubSpot Portal'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-medium">Last Synced:</span>
+                    <span className="font-mono text-slate-700 text-[11px]">
+                      {crmConnections[0].last_sync_at
+                        ? new Date(crmConnections[0].last_sync_at).toLocaleString()
+                        : 'Never'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-medium">Field Mapping:</span>
+                    <span className="font-bold text-slate-800">10 Canonical Groups</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <SquircleButton
+                    variant="outline"
+                    size="sm"
+                    disabled={isSyncingCrm || crmConnections[0].sync_status === 'SYNCING'}
+                    onClick={() => handleTriggerSync(crmConnections[0].id)}
+                    className="flex-1 text-[11px] font-bold py-2 flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCrm || crmConnections[0].sync_status === 'SYNCING' ? 'animate-spin' : ''}`} />
+                    Sync Now
+                  </SquircleButton>
+
+                  <SquircleButton
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleViewErrors(crmConnections[0].id)}
+                    className="text-[11px] font-bold py-2 flex items-center gap-1 text-slate-600 hover:text-slate-900"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-500" />
+                    Errors ({crmConnections[0].sync_errors_json?.length || 0})
+                  </SquircleButton>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span>Write-back Lifecycle Stage:</span>
-                <span className="font-mono text-slate-800">marketingqualifiedlead</span>
+            ) : (
+              <div className="p-3.5 rounded-[14px] bg-slate-50 border border-slate-200/60 text-xs space-y-1">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Field Mapping Status:</span>
+                  <span className="font-bold text-slate-800">10 Canonical Groups</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Sync Mechanism:</span>
+                  <span className="font-mono text-slate-800">OAuth2 + Webhooks</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <SquircleButton
-            variant={isHubSpotConnected ? 'outline' : 'primary'}
+            variant={crmConnections.length > 0 ? 'outline' : 'primary'}
             size="sm"
             onClick={() => {
-              if (isHubSpotConnected) {
-                setIsHubSpotConnected(false);
-                setNotice('HubSpot CRM disconnected.');
+              if (crmConnections.length > 0) {
+                setNotice('HubSpot CRM connection is active. Re-authentication can be initiated if needed.');
               } else {
                 setIsCrmModalOpen(true);
               }
             }}
             className="w-full flex items-center justify-center gap-1.5 shadow-sm"
           >
-            {isHubSpotConnected ? 'Disconnect CRM' : 'Connect HubSpot CRM'}
+            {crmConnections.length > 0 ? 'Manage CRM Connection' : 'Connect HubSpot CRM'}
           </SquircleButton>
         </FrostedGlassCard>
       </div>
@@ -555,6 +664,49 @@ export const IntegrationsView: React.FC = () => {
             </SquircleButton>
           </div>
         </form>
+      </SquircleModal>
+
+      {/* Per-Record Sync Errors & Warnings Modal */}
+      <SquircleModal
+        isOpen={isErrorModalOpen}
+        onClose={() => setIsErrorModalOpen(false)}
+        title={`CRM Per-Record Sync Errors & Warnings ${errorModalConnId ? `(${errorModalConnId.slice(0, 8)})` : ''}`}
+        maxWidth="lg"
+      >
+        <div className="space-y-4 pt-1">
+          <p className="text-xs text-[var(--text-secondary)]">
+            Per-record telemetry tracking invalid email addresses, schema mismatches, and suppression blocks during bidirectional synchronization.
+          </p>
+
+          {selectedCrmErrors.length === 0 ? (
+            <div className="p-8 rounded-[16px] bg-emerald-50/60 border border-emerald-200 text-center space-y-2">
+              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+              <p className="text-sm font-bold text-emerald-900">Zero Sync Errors</p>
+              <p className="text-xs text-emerald-700">All contact records normalized and ingested without issues.</p>
+            </div>
+          ) : (
+            <div className="max-h-[350px] overflow-y-auto space-y-2 pr-1">
+              {selectedCrmErrors.map((err, idx) => (
+                <div key={idx} className="p-3 rounded-[14px] bg-slate-50 border border-slate-200/80 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-mono font-bold text-slate-800">{err.email || err.record_id || 'Unknown Record'}</span>
+                    <span className="text-slate-400">{err.timestamp ? new Date(err.timestamp).toLocaleTimeString() : ''}</span>
+                  </div>
+                  <p className="text-rose-600 font-medium flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    {err.error}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="pt-2 flex justify-end">
+            <SquircleButton variant="primary" size="sm" onClick={() => setIsErrorModalOpen(false)}>
+              Close
+            </SquircleButton>
+          </div>
+        </div>
       </SquircleModal>
     </div>
   );

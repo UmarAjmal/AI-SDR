@@ -205,3 +205,82 @@ async def test_crm_sync_service_deduplication_and_suppression(db_session: AsyncS
     alice = alice_lead_res.scalar_one()
     assert alice.first_name == "Alice"
     assert alice.total_score >= 50.0
+
+@pytest.mark.asyncio
+async def test_crm_sync_stop_condition_and_per_record_errors(db_session: AsyncSession):
+    ws = Workspace(name="Stop Condition Org", domain="stopcondition.org", settings={})
+    db_session.add(ws)
+    await db_session.flush()
+
+    encryptor = TokenEncryptor()
+    conn = CRMConnection(
+        workspace_id=ws.id,
+        provider=CRMProviderType.HUBSPOT,
+        account_id="hub-stop-test",
+        encrypted_access_token=encryptor.encrypt("mock-token"),
+        encrypted_refresh_token=encryptor.encrypt("mock-refresh"),
+        sync_status=CRMSyncStatus.CONNECTED
+    )
+    db_session.add(conn)
+    await db_session.commit()
+
+    # Define mock handler with invalid contact and active deal contact
+    def mock_crm_handler(request: httpx.Request) -> httpx.Response:
+        url_str = str(request.url)
+        if "/crm/v3/objects/contacts" in url_str:
+            return httpx.Response(200, json={
+                "results": [
+                    {
+                        "id": "hs-invalid-01",
+                        "properties": {
+                            "firstname": "Invalid",
+                            "lastname": "Email",
+                            "email": "not-an-email",
+                            "company": "Bad Data Corp"
+                        }
+                    },
+                    {
+                        "id": "hs-active-deal-02",
+                        "properties": {
+                            "firstname": "Bob",
+                            "lastname": "Customer",
+                            "email": "bob.customer@dealcorp.com",
+                            "company": "Deal Corp",
+                            "lifecyclestage": "opportunity"  # Stop condition 6!
+                        }
+                    }
+                ],
+                "paging": {}
+            })
+        return httpx.Response(404, text="Not Found")
+
+    transport = httpx.MockTransport(mock_crm_handler)
+    mock_client = httpx.AsyncClient(transport=transport, base_url="https://api.hubapi.com")
+    provider = HubSpotProvider(mock_client=mock_client)
+
+    completed_conn = await CRMSyncService.sync_connection(
+        workspace_id=ws.id,
+        connection_id=conn.id,
+        db=db_session,
+        provider=provider
+    )
+
+    # 1. Assert per-record errors were captured for invalid email
+    assert len(completed_conn.sync_errors_json) >= 1
+    err = completed_conn.sync_errors_json[0]
+    assert err["record_id"] == "hs-invalid-01"
+    assert "Invalid or missing email format" in err["error"]
+
+    # 2. Assert Stop Condition 6 for active sales deal
+    active_deal_lead_res = await db_session.execute(
+        select(CRMLead).where(
+            CRMLead.workspace_id == ws.id,
+            CRMLead.email == "bob.customer@dealcorp.com"
+        )
+    )
+    active_deal_lead = active_deal_lead_res.scalar_one()
+    assert active_deal_lead.qualification_status == "CRM_ACTIVE_DEAL"
+    assert active_deal_lead.suppression_reason == "CRM_ACTIVE_DEAL"
+    assert active_deal_lead.state == "DISQUALIFIED"
+    assert active_deal_lead.is_qualified is False
+

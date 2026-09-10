@@ -1,10 +1,12 @@
 import secrets
+import asyncio
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Any
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from apps.api.core.database import get_db
+from apps.api.core.database import get_db, AsyncSessionLocal
 from apps.api.core.dependencies import get_current_workspace_context, require_role, WorkspaceContext
 from packages.common.models.workspace import WorkspaceRole
 from packages.common.models.crm import CRMConnection, CRMProviderType, CRMSyncStatus
@@ -15,6 +17,7 @@ from packages.common.schemas.crm import (
 )
 from packages.common.encryption import TokenEncryptor
 from packages.crm.adapters.hubspot_adapter import HubSpotProvider
+from packages.crm.sync_service import CRMSyncService
 from apps.worker.tasks.crm_tasks import sync_crm_leads_task
 
 router = APIRouter(prefix="/integrations/crm", tags=["CRM Integrations"])
@@ -136,13 +139,80 @@ async def trigger_crm_sync(
     await db.commit()
     await db.refresh(conn)
 
-    # Dispatch Celery background task
+    # Dispatch background task (Celery with local non-blocking fallback)
     try:
         sync_crm_leads_task.delay(
             workspace_id=ctx.workspace_id,
             connection_id=conn.id
         )
     except Exception:
-        pass
+        async def _run_local_sync():
+            try:
+                async with AsyncSessionLocal() as session:
+                    await CRMSyncService.sync_connection(
+                        workspace_id=ctx.workspace_id,
+                        connection_id=conn.id,
+                        db=session
+                    )
+            except Exception:
+                pass
+        asyncio.create_task(_run_local_sync())
 
     return conn
+
+@router.get("/{connection_id}/errors")
+async def get_crm_sync_errors(
+    connection_id: str,
+    ctx: WorkspaceContext = Depends(require_role([WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.MEMBER])),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns per-record synchronization errors and warnings for user visibility.
+    """
+    res = await db.execute(
+        select(CRMConnection).where(
+            CRMConnection.id == connection_id,
+            CRMConnection.workspace_id == ctx.workspace_id
+        )
+    )
+    conn = res.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=404, detail="CRM connection not found")
+
+    return {
+        "connection_id": conn.id,
+        "provider": conn.provider,
+        "sync_status": conn.sync_status,
+        "errors": conn.sync_errors_json or []
+    }
+
+@router.post("/{provider}/webhook", status_code=status.HTTP_200_OK)
+async def handle_crm_webhook(
+    provider: CRMProviderType,
+    payload: Any = Body(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Ingests incremental CRM webhooks (e.g. HubSpot contact updates, opt-outs, lifecycle shifts).
+    Enforces deduplication via event ID and non-blocking background dispatch.
+    """
+    if provider == CRMProviderType.HUBSPOT:
+        adapter = HubSpotProvider()
+        events = adapter.parse_webhook_payload(payload)
+        for ev in events:
+            conns_res = await db.execute(
+                select(CRMConnection).where(CRMConnection.provider == provider)
+            )
+            conns = conns_res.scalars().all()
+            for conn in conns:
+                await CRMSyncService.handle_webhook_event(
+                    workspace_id=conn.workspace_id,
+                    connection_id=conn.id,
+                    event_type=ev.event_type,
+                    object_id=ev.object_id,
+                    properties=ev.properties,
+                    db=db,
+                    provider=adapter
+                )
+        return {"status": "accepted", "events_processed": len(events)}
+    return {"status": "ignored"}

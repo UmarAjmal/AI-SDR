@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -26,6 +26,7 @@ class CRMSyncService:
         """
         Executes bidirectional synchronization and lead normalization for a CRM connection.
         Enforces tenant isolation, token envelope encryption, deduplication, and deterministic scoring.
+        Tracks per-record sync errors for full user visibility.
         """
         res = await db.execute(
             select(CRMConnection).where(
@@ -94,6 +95,7 @@ class CRMSyncService:
 
         cursor = conn.sync_cursor
         total_imported = 0
+        sync_errors: list[dict] = list(conn.sync_errors_json or [])
 
         try:
             while total_imported < max_contacts:
@@ -101,84 +103,140 @@ class CRMSyncService:
                 batch = await provider.fetch_contacts(access_token=access_token, cursor=cursor, limit=batch_limit)
 
                 for contact in batch.contacts:
-                    norm_email = contact.email.strip().lower()
-                    if not norm_email:
-                        continue
+                    try:
+                        norm_email = contact.email.strip().lower() if contact.email else ""
+                        if not norm_email or "@" not in norm_email:
+                            sync_errors.append({
+                                "record_id": contact.crm_record_id,
+                                "email": getattr(contact, "email", "N/A"),
+                                "error": "Invalid or missing email format; contact skipped",
+                                "timestamp": datetime.now(timezone.utc).isoformat()
+                            })
+                            continue
 
-                    # Score contact deterministically
-                    score_res = LeadScorer.evaluate_lead_score(contact, profile)
+                        # Score contact deterministically
+                        score_res = LeadScorer.evaluate_lead_score(contact, profile)
 
-                    # Deduplication check: (workspace_id, email)
-                    existing_res = await db.execute(
-                        select(CRMLead).where(
-                            CRMLead.workspace_id == workspace_id,
-                            CRMLead.email == norm_email
-                        )
-                    )
-                    existing_lead = existing_res.scalar_one_or_none()
+                        # Respect CRM ownership, lifecycle stage & stop rules
+                        # Stop condition 6: CRM indicates active sales deal / opportunity
+                        is_active_deal = False
+                        lifecycle = (contact.lifecycle_stage or "").lower()
+                        if lifecycle in ("customer", "opportunity", "closed_won", "evangelist"):
+                            is_active_deal = True
 
-                    if existing_lead:
-                        # Update in place without duplicating
-                        existing_lead.crm_connection_id = conn.id
-                        existing_lead.crm_record_id = contact.crm_record_id or existing_lead.crm_record_id
-                        existing_lead.first_name = contact.first_name or existing_lead.first_name
-                        existing_lead.last_name = contact.last_name or existing_lead.last_name
-                        existing_lead.phone = contact.phone or existing_lead.phone
-                        existing_lead.job_title = contact.job_title or existing_lead.job_title
-                        existing_lead.company_name = contact.company_name or existing_lead.company_name
-                        existing_lead.domain = contact.domain or existing_lead.domain
-                        existing_lead.industry = contact.industry or existing_lead.industry
-                        existing_lead.employee_count = contact.employee_count or existing_lead.employee_count
-                        existing_lead.location = contact.location or existing_lead.location
-                        existing_lead.revenue_band = contact.revenue_band or existing_lead.revenue_band
-                        existing_lead.lifecycle_stage = contact.lifecycle_stage or existing_lead.lifecycle_stage
-                        existing_lead.owner_id = contact.owner_id or existing_lead.owner_id
-                        existing_lead.lead_notes = contact.lead_notes or existing_lead.lead_notes
-                        existing_lead.custom_fields = {**existing_lead.custom_fields, **contact.custom_fields}
-
-                        # Suppression propagation
+                        suppression_reason = None
+                        lead_state = "DISCOVERED"
                         if contact.opt_out:
-                            existing_lead.opt_out = True
-                        if contact.do_not_contact:
-                            existing_lead.do_not_contact = True
+                            suppression_reason = "CRM_OPTOUT"
+                            lead_state = "SUPPRESSED"
+                        elif contact.do_not_contact:
+                            suppression_reason = "CRM_DO_NOT_CONTACT"
+                            lead_state = "SUPPRESSED"
+                        elif is_active_deal:
+                            suppression_reason = "CRM_ACTIVE_DEAL"
+                            lead_state = "DISQUALIFIED"
 
-                        # Update scores
-                        existing_lead.icp_score = score_res.icp_score
-                        existing_lead.intent_score = score_res.intent_score
-                        existing_lead.total_score = score_res.total_score
-                        existing_lead.score_reasons_json = score_res.to_dict()["reasons"]
+                        provider_str = conn.provider.value if hasattr(conn.provider, "value") else str(conn.provider)
+                        source_str = (contact.custom_fields or {}).get("source") or "CRM_IMPORT"
 
-                    else:
-                        new_lead = CRMLead(
-                            workspace_id=workspace_id,
-                            crm_connection_id=conn.id,
-                            crm_record_id=contact.crm_record_id,
-                            first_name=contact.first_name,
-                            last_name=contact.last_name,
-                            email=norm_email,
-                            phone=contact.phone,
-                            job_title=contact.job_title,
-                            company_name=contact.company_name,
-                            domain=contact.domain,
-                            industry=contact.industry,
-                            employee_count=contact.employee_count,
-                            location=contact.location,
-                            revenue_band=contact.revenue_band,
-                            lifecycle_stage=contact.lifecycle_stage,
-                            owner_id=contact.owner_id,
-                            lead_notes=contact.lead_notes,
-                            custom_fields=contact.custom_fields,
-                            opt_out=contact.opt_out,
-                            do_not_contact=contact.do_not_contact,
-                            bounce_status="NONE",
-                            icp_score=score_res.icp_score,
-                            intent_score=score_res.intent_score,
-                            total_score=score_res.total_score,
-                            score_reasons_json=score_res.to_dict()["reasons"]
+                        # Deduplication check: (workspace_id, email)
+                        existing_res = await db.execute(
+                            select(CRMLead).where(
+                                CRMLead.workspace_id == workspace_id,
+                                CRMLead.email == norm_email
+                            )
                         )
-                        db.add(new_lead)
+                        existing_lead = existing_res.scalar_one_or_none()
 
-                    total_imported += 1
+                        if existing_lead:
+                            # Update in place without duplicating
+                            existing_lead.crm_connection_id = conn.id
+                            existing_lead.crm_record_id = contact.crm_record_id or existing_lead.crm_record_id
+                            existing_lead.provider = provider_str
+                            existing_lead.first_name = contact.first_name or existing_lead.first_name
+                            existing_lead.last_name = contact.last_name or existing_lead.last_name
+                            existing_lead.phone = contact.phone or existing_lead.phone
+                            existing_lead.job_title = contact.job_title or existing_lead.job_title
+                            existing_lead.company_name = contact.company_name or existing_lead.company_name
+                            existing_lead.domain = contact.domain or existing_lead.domain
+                            existing_lead.industry = contact.industry or existing_lead.industry
+                            existing_lead.employee_count = contact.employee_count or existing_lead.employee_count
+                            existing_lead.location = contact.location or existing_lead.location
+                            existing_lead.revenue_band = contact.revenue_band or existing_lead.revenue_band
+                            existing_lead.lifecycle_stage = contact.lifecycle_stage or existing_lead.lifecycle_stage
+                            existing_lead.owner_id = contact.owner_id or existing_lead.owner_id
+                            existing_lead.lead_notes = contact.lead_notes or existing_lead.lead_notes
+                            existing_lead.custom_fields = {**(existing_lead.custom_fields or {}), **(contact.custom_fields or {})}
+
+                            # Suppression propagation
+                            if contact.opt_out:
+                                existing_lead.opt_out = True
+                                existing_lead.suppression_reason = "CRM_OPTOUT"
+                                existing_lead.state = "SUPPRESSED"
+                            if contact.do_not_contact:
+                                existing_lead.do_not_contact = True
+                                existing_lead.suppression_reason = "CRM_DO_NOT_CONTACT"
+                                existing_lead.state = "SUPPRESSED"
+                            if is_active_deal:
+                                existing_lead.suppression_reason = "CRM_ACTIVE_DEAL"
+                                existing_lead.is_qualified = False
+                                existing_lead.qualification_status = "CRM_ACTIVE_DEAL"
+
+                            # Update scores
+                            existing_lead.icp_score = score_res.icp_score
+                            existing_lead.intent_score = score_res.intent_score
+                            existing_lead.total_score = score_res.total_score
+                            existing_lead.score_band = score_res.score_band
+                            existing_lead.score_reasons_json = score_res.to_dict()["reasons"]
+
+                        else:
+                            new_lead = CRMLead(
+                                workspace_id=workspace_id,
+                                crm_connection_id=conn.id,
+                                crm_record_id=contact.crm_record_id,
+                                provider=provider_str,
+                                source=source_str,
+                                first_name=contact.first_name,
+                                last_name=contact.last_name,
+                                email=norm_email,
+                                phone=contact.phone,
+                                job_title=contact.job_title,
+                                company_name=contact.company_name,
+                                domain=contact.domain,
+                                industry=contact.industry,
+                                employee_count=contact.employee_count,
+                                location=contact.location,
+                                revenue_band=contact.revenue_band,
+                                lifecycle_stage=contact.lifecycle_stage,
+                                owner_id=contact.owner_id,
+                                lead_notes=contact.lead_notes,
+                                custom_fields=contact.custom_fields or {},
+                                opt_out=contact.opt_out,
+                                do_not_contact=contact.do_not_contact,
+                                suppression_reason=suppression_reason,
+                                state=lead_state,
+                                bounce_status="NONE",
+                                icp_score=score_res.icp_score,
+                                intent_score=score_res.intent_score,
+                                total_score=score_res.total_score,
+                                score_band=score_res.score_band,
+                                score_reasons_json=score_res.to_dict()["reasons"]
+                            )
+                            if is_active_deal:
+                                new_lead.is_qualified = False
+                                new_lead.qualification_status = "CRM_ACTIVE_DEAL"
+                            db.add(new_lead)
+
+                        total_imported += 1
+
+                    except Exception as rec_err:
+                        logger.warning(f"Error processing CRM contact {getattr(contact, 'crm_record_id', 'unknown')}: {rec_err}")
+                        sync_errors.append({
+                            "record_id": getattr(contact, "crm_record_id", None),
+                            "email": getattr(contact, "email", None),
+                            "error": str(rec_err),
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
 
                 await db.flush()
 
@@ -190,15 +248,158 @@ class CRMSyncService:
             conn.sync_cursor = cursor
             conn.last_sync_at = datetime.now(timezone.utc)
             conn.sync_status = CRMSyncStatus.CONNECTED
+            conn.sync_errors_json = sync_errors[-100:]  # Retain last 100 per-record errors
             await db.commit()
             await db.refresh(conn)
-            logger.info(f"CRM sync finished successfully for connection {conn.id}. Total contacts processed: {total_imported}")
+            logger.info(f"CRM sync finished successfully for connection {conn.id}. Total contacts processed: {total_imported}, errors: {len(sync_errors)}")
             return conn
 
         except Exception as e:
             logger.error(f"Error during CRM sync for connection {conn.id}: {e}")
             conn.sync_status = CRMSyncStatus.ERROR
             conn.sync_error_message = str(e)
+            conn.sync_errors_json = sync_errors[-100:]
             await db.commit()
             await db.refresh(conn)
             return conn
+
+    @classmethod
+    async def sync_lead_back_to_crm(
+        cls,
+        workspace_id: str,
+        lead_id: str,
+        db: AsyncSession,
+        provider: Optional[CRMProvider] = None
+    ) -> bool:
+        """
+        Pushes canonical lead status updates (meeting booked, qualification, suppression/opt-out)
+        back into connected CRM provider for bidirectional updates.
+        """
+        res = await db.execute(
+            select(CRMLead).where(
+                CRMLead.id == lead_id,
+                CRMLead.workspace_id == workspace_id
+            )
+        )
+        lead = res.scalar_one_or_none()
+        if not lead or not lead.crm_record_id:
+            logger.info(f"Lead {lead_id} does not have a CRM record ID for sync-back")
+            return False
+
+        # Find associated connection
+        conn_res = await db.execute(
+            select(CRMConnection).where(
+                CRMConnection.id == lead.crm_connection_id,
+                CRMConnection.workspace_id == workspace_id
+            )
+        )
+        conn = conn_res.scalar_one_or_none()
+        if not conn:
+            # Fallback to any connected CRM in workspace
+            fb_res = await db.execute(
+                select(CRMConnection).where(
+                    CRMConnection.workspace_id == workspace_id,
+                    CRMConnection.sync_status == CRMSyncStatus.CONNECTED
+                )
+            )
+            conn = fb_res.scalars().first()
+
+        if not conn or conn.sync_status == CRMSyncStatus.REVOKED:
+            logger.warning(f"No active CRM connection found for workspace {workspace_id}")
+            return False
+
+        encryptor = TokenEncryptor()
+        try:
+            token = encryptor.decrypt(conn.encrypted_access_token)
+        except Exception as e:
+            logger.error(f"Failed to decrypt token for CRM sync-back: {e}")
+            return False
+
+        if provider is None:
+            if conn.provider == CRMProviderType.HUBSPOT:
+                provider = HubSpotProvider()
+            else:
+                return False
+
+        payload: dict[str, Any] = {}
+        if lead.opt_out or lead.do_not_contact:
+            payload["hs_email_optout"] = "true"
+        if lead.meeting_booked:
+            payload["hs_lead_status"] = "CONNECTED"
+            payload["lifecyclestage"] = "salesqualifiedlead"
+        elif lead.is_qualified:
+            payload["hs_lead_status"] = "QUALIFIED"
+            payload["lifecyclestage"] = "marketingqualifiedlead"
+        elif lead.disqualified:
+            payload["hs_lead_status"] = "UNQUALIFIED"
+
+        if lead.lead_notes:
+            payload["notes_last_contacted"] = datetime.now(timezone.utc).isoformat()
+
+        try:
+            success = await provider.update_contact(
+                access_token=token,
+                contact_id=lead.crm_record_id,
+                fields=payload
+            )
+            return bool(success)
+        except Exception as e:
+            logger.error(f"Failed to sync lead {lead_id} back to CRM: {e}")
+            return False
+
+    @classmethod
+    async def handle_webhook_event(
+        cls,
+        workspace_id: str,
+        connection_id: str,
+        event_type: str,
+        object_id: str,
+        properties: dict[str, Any],
+        db: AsyncSession,
+        provider: Optional[CRMProvider] = None
+    ) -> Optional[CRMLead]:
+        """
+        Handles incremental CRM updates received via webhook events.
+        Enforces deduplication and deterministic lead scoring.
+        """
+        res = await db.execute(
+            select(CRMConnection).where(
+                CRMConnection.id == connection_id,
+                CRMConnection.workspace_id == workspace_id
+            )
+        )
+        conn = res.scalar_one_or_none()
+        if not conn:
+            return None
+
+        # Find existing lead by crm_record_id
+        lead_res = await db.execute(
+            select(CRMLead).where(
+                CRMLead.workspace_id == workspace_id,
+                CRMLead.crm_record_id == object_id
+            )
+        )
+        lead = lead_res.scalar_one_or_none()
+
+        if lead:
+            # Apply incremental property updates
+            if "hs_email_optout" in properties:
+                opt_out = str(properties["hs_email_optout"]).lower() == "true"
+                lead.opt_out = opt_out
+                if opt_out:
+                    lead.do_not_contact = True
+                    lead.suppression_reason = "CRM_OPTOUT"
+                    lead.state = "SUPPRESSED"
+            if "lifecyclestage" in properties:
+                stage = str(properties["lifecyclestage"]).lower()
+                lead.lifecycle_stage = stage
+                if stage in ("customer", "opportunity", "closed_won"):
+                    lead.suppression_reason = "CRM_ACTIVE_DEAL"
+                    lead.is_qualified = False
+                    lead.qualification_status = "CRM_ACTIVE_DEAL"
+
+            await db.commit()
+            await db.refresh(lead)
+            return lead
+
+        return None

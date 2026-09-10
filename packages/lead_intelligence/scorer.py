@@ -218,6 +218,11 @@ class LeadScorer:
             negative_score -= 20.0
             reasons.append(ScoreReason("NEGATIVE_DEDUCTION", -20.0, f"Competitor domain identified: '{domain}'"))
 
+        # c. Opt-out or Do-Not-Contact flag
+        if getattr(lead, "opt_out", False) or getattr(lead, "do_not_contact", False):
+            negative_score -= 20.0
+            reasons.append(ScoreReason("NEGATIVE_DEDUCTION", -20.0, "Opted-out or marked Do-Not-Contact in CRM"))
+
         negative_score = max(-20.0, negative_score)
 
         # TOTAL CLAMPED (0 to 100)

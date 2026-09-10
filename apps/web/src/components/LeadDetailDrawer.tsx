@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import {
   X,
   Mail,
@@ -14,6 +15,7 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Briefcase,
+  CalendarCheck,
 } from 'lucide-react';
 import { ICPScoreGauge } from './ui/ICPScoreGauge';
 import { SquircleButton } from './ui/SquircleButton';
@@ -24,6 +26,7 @@ interface LeadDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onToggleOptOut: (leadId: string, currentStatus: boolean) => void;
+  onRefreshLeads?: () => void;
 }
 
 type DetailTab = 'overview' | 'timeline' | 'ai_intelligence' | 'crm_sync';
@@ -33,16 +36,18 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
   isOpen,
   onClose,
   onToggleOptOut,
+  onRefreshLeads,
 }) => {
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
   const [isPaused, setIsPaused] = useState(false);
+  const [isActing, setIsActing] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   if (!isOpen || !lead) return null;
 
   const showNotification = (msg: string) => {
     setActionSuccess(msg);
-    setTimeout(() => setActionSuccess(null), 3000);
+    setTimeout(() => setActionSuccess(null), 3500);
   };
 
   const handlePauseResume = () => {
@@ -50,12 +55,51 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
     showNotification(isPaused ? 'Sequence resumed for lead' : 'Sequence paused for lead');
   };
 
-  const handleHandoff = () => {
-    showNotification('Lead successfully transferred to Human Sales Rep queue');
+  const handleMarkMeetingBooked = async () => {
+    setIsActing(true);
+    try {
+      await axios.post(`/api/v1/leads/${lead.id}/outcome`, {
+        meeting_booked: true,
+        is_qualified: true,
+      });
+      showNotification('Meeting marked as BOOKED! Synced back to CRM.');
+      onRefreshLeads?.();
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Failed to update meeting status.');
+    } finally {
+      setIsActing(false);
+    }
   };
 
-  const handleDisqualify = () => {
-    showNotification('Lead marked as DISQUALIFIED (Removed from active campaigns)');
+  const handleHandoff = async () => {
+    setIsActing(true);
+    try {
+      await axios.post(`/api/v1/leads/${lead.id}/outcome`, {
+        handoff_required: true,
+      });
+      showNotification('Lead successfully transferred to Human Sales Rep queue.');
+      onRefreshLeads?.();
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Failed to handoff lead.');
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const handleDisqualify = async () => {
+    setIsActing(true);
+    try {
+      await axios.post(`/api/v1/leads/${lead.id}/outcome`, {
+        disqualified: true,
+        is_qualified: false,
+      });
+      showNotification('Lead marked as DISQUALIFIED (CRM sequence halted).');
+      onRefreshLeads?.();
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Failed to disqualify lead.');
+    } finally {
+      setIsActing(false);
+    }
   };
 
   return (
@@ -410,7 +454,7 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
             </div>
           )}
 
-          {/* TAB 4: CRM SYNCHRONIZATION (Section 17.3) */}
+          {/* TAB 4: CRM SYNCHRONIZATION (Section 5.2 Canonical Lead Model) */}
           {activeTab === 'crm_sync' && (
             <div className="space-y-4 animate-in fade-in">
               <div className="p-4 rounded-[18px] bg-white border border-slate-200/80 shadow-xs space-y-3">
@@ -418,46 +462,84 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
                   <div className="flex items-center gap-2">
                     <Database className="w-4 h-4 text-orange-500" />
                     <span className="text-xs font-bold text-[var(--text-primary)]">
-                      HubSpot CRM Two-Way Sync
+                      {lead.provider || 'HubSpot CRM'} Two-Way Sync
                     </span>
                   </div>
-                  <span className="px-2.5 py-1 rounded-[8px] bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
-                    SYNCED
+                  <span className={`px-2.5 py-1 rounded-[8px] text-[10px] font-black uppercase ${
+                    lead.crm_record_id ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                  }`}>
+                    {lead.crm_record_id ? 'SYNCED' : 'LOCAL ONLY'}
                   </span>
                 </div>
 
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Remote Contact ID</span>
-                    <span className="font-mono font-bold text-slate-800">hs_cnt_982314</span>
+                    <span className="text-slate-500">Provider Record ID</span>
+                    <span className="font-mono font-bold text-slate-800">{lead.provider_record_id || lead.crm_record_id || 'Not Synced'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">CRM Owner ID</span>
+                    <span className="font-mono text-slate-800">{lead.owner_id || 'Unassigned'}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-100">
                     <span className="text-slate-500">Lifecycle Stage</span>
-                    <span className="font-bold text-emerald-600">Marketing Qualified Lead (MQL)</span>
+                    <span className="font-bold text-emerald-600">{lead.lifecycle_stage || 'lead'}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Last Synced At</span>
-                    <span className="font-medium text-slate-700">Today at 10:45 AM</span>
+                    <span className="text-slate-500">Source Vertical</span>
+                    <span className="font-medium text-slate-700">{lead.source || 'CRM_SYNC'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Suppression State</span>
+                    <span className={`font-bold ${lead.opt_out || lead.do_not_contact ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {lead.suppression_reason || (lead.opt_out ? 'Opted-Out' : 'Active Outreach Allowed')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Meeting Confirmed</span>
+                    <span className={`font-bold ${lead.meeting_booked ? 'text-emerald-600' : 'text-slate-600'}`}>
+                      {lead.meeting_booked ? 'YES (Confirmed on Calendar)' : 'No'}
+                    </span>
                   </div>
                   <div className="flex justify-between py-1">
-                    <span className="text-slate-500">Two-Way Webhook</span>
-                    <span className="font-medium text-slate-700">Active (Deduplication verified)</span>
+                    <span className="text-slate-500">Bidirectional Sync</span>
+                    <span className="font-medium text-slate-700">Active (AES-256 Envelope Encrypted)</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Group 4 Context & Notes */}
+              <div className="p-4 rounded-[18px] bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
+                <span className="font-bold text-slate-700 block">Lead Context &amp; Notes</span>
+                <p className="text-slate-600 italic">
+                  {lead.lead_notes || 'No prior interactions or custom notes logged in CRM.'}
+                </p>
               </div>
             </div>
           )}
         </div>
 
-        {/* 3. Footer: Section 17.3 Manual Controls (Pause, Resume, Handoff, Disqualify, Suppress) */}
+        {/* 3. Footer: Manual Controls & Outcomes */}
         <div className="p-4 sm:p-5 border-t border-slate-100/90 bg-white/80 space-y-2.5">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Section 17.3 Manual Sequence Controls
+            Lead Outcome &amp; Sequence Controls
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <SquircleButton
+              variant="primary"
+              size="sm"
+              disabled={isActing || lead.meeting_booked}
+              onClick={handleMarkMeetingBooked}
+              className="text-[11px] font-bold py-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <CalendarCheck className="w-3.5 h-3.5 mr-1" />
+              {lead.meeting_booked ? 'Booked' : 'Book Call'}
+            </SquircleButton>
+
             <SquircleButton
               variant="outline"
               size="sm"
+              disabled={isActing}
               onClick={handlePauseResume}
               className="text-[11px] font-bold py-2"
             >
@@ -468,6 +550,7 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
             <SquircleButton
               variant="outline"
               size="sm"
+              disabled={isActing || lead.handoff_required}
               onClick={handleHandoff}
               className="text-[11px] font-bold py-2"
             >
@@ -478,6 +561,7 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
             <SquircleButton
               variant="outline"
               size="sm"
+              disabled={isActing || lead.disqualified}
               onClick={handleDisqualify}
               className="text-[11px] font-bold py-2"
             >
@@ -488,6 +572,7 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
             <SquircleButton
               variant={lead.opt_out ? 'outline' : 'danger'}
               size="sm"
+              disabled={isActing}
               onClick={() => {
                 onToggleOptOut(lead.id, lead.opt_out);
                 showNotification(lead.opt_out ? 'Global suppression removed' : 'Lead suppressed & unsubscribed');

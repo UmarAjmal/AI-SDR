@@ -35,11 +35,33 @@ export interface LeadItem {
   domain: string;
   industry: string;
   employee_count?: number;
+  location?: string;
+  revenue_band?: string;
+  provider?: string;
+  provider_record_id?: string;
+  crm_record_id?: string;
+  owner_id?: string;
+  lifecycle_stage: string;
+  source?: string;
+  lead_notes?: string;
+  custom_fields?: Record<string, any>;
+  previous_interactions?: any[];
   total_score: number;
+  icp_score?: number;
+  intent_score?: number;
   score_band: 'HOT' | 'WARM' | 'COLD';
   opt_out: boolean;
-  lifecycle_stage: string;
-  qualification_status: 'QUALIFIED' | 'DEVELOPING' | 'UNQUALIFIED';
+  do_not_contact?: boolean;
+  suppression_reason?: string;
+  campaign_membership?: string;
+  current_step?: number;
+  state?: string;
+  next_action_at?: string;
+  thread_id?: string;
+  meeting_booked?: boolean;
+  disqualified?: boolean;
+  handoff_required?: boolean;
+  qualification_status: 'QUALIFIED' | 'DEVELOPING' | 'UNQUALIFIED' | string;
   is_qualified: boolean;
   qualification_details?: QualificationDetails;
   reasons: { category: string; points: number; reason: string }[];
@@ -101,10 +123,32 @@ export const LeadsView: React.FC = () => {
         domain: l.domain || '',
         industry: l.industry || 'General',
         employee_count: l.employee_count,
+        location: l.location,
+        revenue_band: l.revenue_band,
+        provider: l.provider,
+        provider_record_id: l.provider_record_id,
+        crm_record_id: l.crm_record_id,
+        owner_id: l.owner_id,
+        lifecycle_stage: l.lifecycle_stage || 'lead',
+        source: l.source || 'CRM_SYNC',
+        lead_notes: l.lead_notes,
+        custom_fields: l.custom_fields,
+        previous_interactions: l.previous_interactions,
         total_score: Number(l.total_score || l.icp_score || 0),
+        icp_score: Number(l.icp_score || 0),
+        intent_score: Number(l.intent_score || 0),
         score_band: (l.score_band as any) || (l.total_score >= 80 ? 'HOT' : l.total_score >= 50 ? 'WARM' : 'COLD'),
         opt_out: Boolean(l.opt_out),
-        lifecycle_stage: l.lifecycle_stage || 'lead',
+        do_not_contact: Boolean(l.do_not_contact),
+        suppression_reason: l.suppression_reason,
+        campaign_membership: l.campaign_membership,
+        current_step: l.current_step,
+        state: l.state,
+        next_action_at: l.next_action_at,
+        thread_id: l.thread_id,
+        meeting_booked: Boolean(l.meeting_booked),
+        disqualified: Boolean(l.disqualified),
+        handoff_required: Boolean(l.handoff_required),
         qualification_status: (l.qualification_status as any) || 'UNQUALIFIED',
         is_qualified: Boolean(l.is_qualified),
         qualification_details: l.qualification_details,
@@ -589,6 +633,7 @@ export const LeadsView: React.FC = () => {
         isOpen={!!selectedLead}
         onClose={() => setSelectedLead(null)}
         onToggleOptOut={handleToggleOptOut}
+        onRefreshLeads={fetchLeads}
       />
     </div>
   );
