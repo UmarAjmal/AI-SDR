@@ -32,9 +32,9 @@ def _clean_pg_data(data: Any) -> Any:
     return data
 
 class WebsiteCrawlerService:
-    # Section 4.1 Crawl Pipeline: Comprehensive crawling up to 50 prioritized pages
-    MAX_PAGES_TO_CRAWL = 50
-    CONCURRENCY_LIMIT = 5
+    # Section 4.1 Crawl Pipeline: Comprehensive professional crawling up to 75 prioritized pages
+    MAX_PAGES_TO_CRAWL = 75
+    CONCURRENCY_LIMIT = 8
 
     @classmethod
     async def run_scan(
@@ -77,12 +77,19 @@ class WebsiteCrawlerService:
             await db.commit()
 
             # Target URLs prioritized and filtered by robots
-            target_urls: list[str] = [
-                u for u, prio in discovered if robots.can_fetch(u)
+            filtered_discovered = [
+                (u, prio) for u, prio in discovered if robots.can_fetch(u)
             ]
+
+            # Section 4.1 Rule 20: Stratified categorical crawl budgeting
+            # Guarantees policies, FAQs, contact, about, and collections are NEVER starved by product URLs
+            target_urls: list[str] = SitemapCrawler.stratify_urls(filtered_discovered, max_budget=crawl_limit)
 
             # Guarantee that base_url / homepage is always included first
             if not target_urls or normalized_base not in target_urls:
+                target_urls.insert(0, normalized_base)
+            elif target_urls[0] != normalized_base:
+                target_urls.remove(normalized_base)
                 target_urls.insert(0, normalized_base)
 
             scan.status = ScanStatus.CRAWLING
@@ -91,13 +98,21 @@ class WebsiteCrawlerService:
             visited: set[str] = set()
             semaphore = asyncio.Semaphore(cls.CONCURRENCY_LIMIT)
 
-            async def fetch_single_page(url_to_crawl: str) -> FetchedPage | None:
+            async def fetch_single_page(url_to_crawl: str) -> tuple[FetchedPage | None, bool]:
                 async with semaphore:
                     try:
-                        return await HybridPageFetcher.fetch(url_to_crawl, client=client)
+                        page = await HybridPageFetcher.fetch(url_to_crawl, client=client)
+                        return page, False
+                    except httpx.HTTPStatusError as hse:
+                        # 404 Not Found / 410 Gone on proactive path probes is an expected miss, not a system failure
+                        if hse.response.status_code in (404, 410):
+                            logger.debug(f"Probed route not found (404/410): {url_to_crawl}")
+                            return None, False
+                        logger.warning(f"HTTP error crawling page {url_to_crawl}: {hse}")
+                        return None, True
                     except Exception as fe:
                         logger.warning(f"Failed crawling page {url_to_crawl}: {fe}")
-                        return None
+                        return None, True
 
             # Crawl prioritized pages with concurrent batch processing and dynamic internal link discovery
             while target_urls and len(crawled_pages) < crawl_limit:
@@ -115,9 +130,10 @@ class WebsiteCrawlerService:
                 # Concurrently fetch the batch
                 results = await asyncio.gather(*[fetch_single_page(u) for u in batch])
 
-                for page in results:
-                    if page is None:
+                for page, is_failure in results:
+                    if is_failure:
                         failed_count += 1
+                    if page is None:
                         continue
 
                     crawled_pages.append(page)

@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 from packages.website_intelligence.cleaner import ContentCleaner
 from packages.website_intelligence.sitemap import SitemapCrawler
 from packages.website_intelligence.fetcher import FetchedPage
@@ -145,4 +146,204 @@ def test_null_byte_sanitization_prevents_postgresql_error():
     assert cleaned_dict["nested"][0]["desc"] == "NullFound"
     assert cleaned_dict["nested"][0]["num"] == 123
     assert _clean_pg_text("Safe\x00String") == "SafeString"
+
+def test_stratified_categorical_crawl_budgeting_prevents_product_starvation():
+    """
+    Section 4.1 Rule 20: Tests that when hundreds of product URLs are discovered,
+    the stratified budgeting algorithm strictly guarantees slots for high-value
+    Policies, FAQs, Contact, About, and Collections without starvation.
+    """
+    from packages.website_intelligence.sitemap import SitemapCrawler
+
+    mock_discovered = [("https://example.com/", 120)]
+
+    # 400 Product URLs (score 100)
+    for i in range(400):
+        mock_discovered.append((f"https://example.com/products/item-{i}", 100))
+
+    # 15 Collection URLs (score 95)
+    for i in range(15):
+        mock_discovered.append((f"https://example.com/collections/category-{i}", 95))
+
+    # 3 About URLs (score 80)
+    mock_discovered.append(("https://example.com/pages/about-us", 80))
+    mock_discovered.append(("https://example.com/pages/our-story", 75))
+
+    # 2 Contact URLs (score 70)
+    mock_discovered.append(("https://example.com/pages/contact-us", 70))
+
+    # 4 FAQ URLs (score 75)
+    mock_discovered.append(("https://example.com/pages/faqs", 75))
+    mock_discovered.append(("https://example.com/pages/help", 70))
+
+    # 5 Policy URLs (score 60)
+    mock_discovered.append(("https://example.com/policies/refund-policy", 60))
+    mock_discovered.append(("https://example.com/policies/shipping-policy", 60))
+    mock_discovered.append(("https://example.com/policies/terms-of-service", 55))
+
+    # Run stratified budgeting with max budget = 50
+    selected = SitemapCrawler.stratify_urls(mock_discovered, max_budget=50)
+
+    # Assert that all critical business pages are included and NOT starved by 400 product URLs
+    assert "https://example.com/" in selected
+    assert "https://example.com/pages/about-us" in selected
+    assert "https://example.com/pages/contact-us" in selected
+    assert "https://example.com/pages/faqs" in selected
+    assert "https://example.com/policies/refund-policy" in selected
+    assert "https://example.com/policies/shipping-policy" in selected
+    assert "https://example.com/policies/terms-of-service" in selected
+
+    # Assert collections are represented
+    collection_count = len([u for u in selected if "/collections/" in u])
+    assert 5 <= collection_count <= 12
+
+    # Assert products are represented without exceeding quota
+    product_count = len([u for u in selected if "/products/" in u])
+    assert 10 <= product_count <= 35
+
+    assert len(selected) <= 50
+
+def test_json_ld_schema_structured_extraction_and_provenance():
+    """
+    Section 4.1 Rule 26 & 28: Tests that JSON-LD Product, Organization, and FAQ schemas
+    are extracted with exact provenance, prices, currencies, contact details, and confidence.
+    """
+    html_with_json_ld = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Embroidered Kurti | Manto</title>
+        <meta property="og:site_name" content="Manto" />
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "Product",
+                    "name": "Iqbal Poetry Embroidered Kurti",
+                    "sku": "MNT-1092",
+                    "category": "Apparel > Kurtis",
+                    "description": "Premium lawn kurti featuring handcrafted Allama Iqbal calligraphy.",
+                    "offers": {
+                        "@type": "Offer",
+                        "price": "4950",
+                        "priceCurrency": "PKR",
+                        "availability": "https://schema.org/InStock"
+                    }
+                },
+                {
+                    "@type": "Organization",
+                    "name": "Manto Apparel Pvt Ltd",
+                    "legalName": "Manto Design House Pvt Ltd",
+                    "telephone": "+92 300 1234567",
+                    "email": "care@shopmanto.com",
+                    "address": {
+                        "@type": "PostalAddress",
+                        "streetAddress": "Gulberg III",
+                        "addressLocality": "Lahore",
+                        "addressCountry": "PK"
+                    }
+                },
+                {
+                    "@type": "FAQPage",
+                    "mainEntity": [
+                        {
+                            "@type": "Question",
+                            "name": "What is the return and exchange window?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "We offer a hassle-free 7-day exchange window for all unworn items."
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        </script>
+    </head>
+    <body>
+        <h1>Iqbal Poetry Embroidered Kurti</h1>
+        <p>Price: Rs. 4,950</p>
+    </body>
+    </html>
+    """
+
+    cleaned = ContentCleaner.clean_html(html_with_json_ld, base_url="https://www.shopmanto.com/products/kurti")
+    assert cleaned.site_name == "Manto"
+    assert len(cleaned.json_ld_data) >= 3
+
+    page = FetchedPage(
+        url="https://www.shopmanto.com/products/kurti",
+        status_code=200,
+        html=html_with_json_ld,
+        cleaned=cleaned
+    )
+
+    extracted = BusinessExtractor.extract_from_pages([page])
+
+    # Assert Company Name extracted from og:site_name
+    assert extracted["company_name"] == "Manto"
+    assert extracted["legal_name"] == "Manto Design House Pvt Ltd"
+
+    # Assert Product offering extracted from JSON-LD
+    assert any(o["title"] == "Iqbal Poetry Embroidered Kurti" for o in extracted["offerings"])
+    matching_offering = next(o for o in extracted["offerings"] if o["title"] == "Iqbal Poetry Embroidered Kurti")
+    assert matching_offering["price"] == "PKR 4950"
+    assert matching_offering["sku"] == "MNT-1092"
+    assert matching_offering["source_url"] == "https://www.shopmanto.com/products/kurti"
+
+    # Assert Organization contact info extracted
+    assert "+92 300 1234567" in extracted["contact_info"]["phones"]
+    assert "care@shopmanto.com" in extracted["contact_info"]["emails"]
+    assert any("Lahore" in addr for addr in extracted["contact_info"]["addresses"])
+
+    # Assert FAQ extracted
+    assert any("return and exchange window" in f["question"].lower() for f in extracted["faqs"])
+
+    # Assert Structured Facts provenance
+    facts = extracted["structured_facts"]
+    assert any(f["fact_type"] == "OFFERING" and f["source_url"] == "https://www.shopmanto.com/products/kurti" for f in facts)
+    assert any(f["fact_type"] == "CONTACT" for f in facts)
+    assert any(f["fact_type"] == "FAQ" for f in facts)
+
+def test_brand_identity_and_policy_extraction():
+    """
+    Tests brand token domain matching and comprehensive policy extraction.
+    """
+    policy_html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Refund and Exchange Policy – Zimal</title>
+    </head>
+    <body>
+        <h1>Exchange Policy</h1>
+        <p>Exchange requests must be submitted within 7 days of delivery.</p>
+        <p>Items must be unworn and in original condition with tags intact.</p>
+        <h2>Shipping and Delivery Information</h2>
+        <p>Standard delivery takes 3 to 5 working days nationwide across Pakistan.</p>
+        <p>Free shipping on all orders above Rs. 3,000.</p>
+    </body>
+    </html>
+    """
+    cleaned = ContentCleaner.clean_html(policy_html, base_url="https://zimal.com.pk/pages/exchange-policy")
+    page = FetchedPage(
+        url="https://zimal.com.pk/pages/exchange-policy",
+        status_code=200,
+        html=policy_html,
+        cleaned=cleaned
+    )
+
+    extracted = BusinessExtractor.extract_from_pages([page])
+    assert extracted["company_name"] == "Zimal"
+
+    # Verify policies extracted
+    policies = extracted["policies"]
+    assert len(policies) >= 2
+    assert any("within 7 days" in p["policy"].lower() for p in policies)
+    assert any("3 to 5 working days" in p["policy"].lower() for p in policies)
+
+    # Verify pricing detection from free shipping rule
+    assert extracted["pricing"]["model"] in ("PUBLIC_TIERS", "PUBLIC_CATALOG_PRICING")
+    assert extracted["pricing"]["currency"] == "PKR"
 

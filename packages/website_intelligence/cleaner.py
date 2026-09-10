@@ -1,4 +1,5 @@
 import hashlib
+import json
 import re
 import urllib.parse
 from bs4 import BeautifulSoup
@@ -21,7 +22,9 @@ class CleanedContent:
         business_topic: str = "GENERAL",
         structured_tables: list[str] | None = None,
         contact_signals: dict | None = None,
-        faq_candidates: list[dict] | None = None
+        faq_candidates: list[dict] | None = None,
+        json_ld_data: list[dict] | None = None,
+        site_name: str = ""
     ):
         self.title = sanitize_postgres_text(title)
         self.text = sanitize_postgres_text(text)
@@ -43,6 +46,8 @@ class CleanedContent:
             {"question": sanitize_postgres_text(f.get("question", "")), "answer": sanitize_postgres_text(f.get("answer", ""))}
             for f in (faq_candidates or [])
         ]
+        self.json_ld_data = json_ld_data or []
+        self.site_name = sanitize_postgres_text(site_name)
 
 class ContentCleaner:
     # Section 4.1 Rule 24: Remove navigation, footer, scripts, styles, boilerplate duplication
@@ -136,12 +141,32 @@ class ContentCleaner:
         title_tag = soup.find("title")
         title = title_tag.get_text().strip() if title_tag else ""
 
-        # 1b. Extract Meta Description & Keywords
+        # 1b. Extract Meta Description, Site Name & Keywords
         meta_description = ""
         meta_desc_tag = soup.find("meta", attrs={"name": re.compile(r"description", re.I)}) or \
                         soup.find("meta", attrs={"property": re.compile(r"og:description", re.I)})
         if meta_desc_tag and getattr(meta_desc_tag, "attrs", None):
             meta_description = str(meta_desc_tag.attrs.get("content", "")).strip()
+
+        og_site_tag = soup.find("meta", property="og:site_name") or soup.find("meta", attrs={"name": "application-name"})
+        site_name = str(og_site_tag.attrs.get("content", "")).strip() if (og_site_tag and getattr(og_site_tag, "attrs", None)) else ""
+
+        # 1c. Extract JSON-LD structured schemas before boilerplate scripts are removed (Rule 26)
+        json_ld_data: list[dict] = []
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                raw_script = script.string or script.get_text()
+                if raw_script:
+                    parsed_json = json.loads(raw_script.strip())
+                    if isinstance(parsed_json, dict):
+                        if "@graph" in parsed_json and isinstance(parsed_json["@graph"], list):
+                            json_ld_data.extend([g for g in parsed_json["@graph"] if isinstance(g, dict)])
+                        else:
+                            json_ld_data.append(parsed_json)
+                    elif isinstance(parsed_json, list):
+                        json_ld_data.extend([item for item in parsed_json if isinstance(item, dict)])
+            except Exception:
+                pass
 
         # 2. Extract links before stripping navigation (Rule 19)
         all_links: list[str] = []
@@ -301,6 +326,8 @@ class ContentCleaner:
             business_topic=business_topic,
             structured_tables=structured_tables,
             contact_signals=contact_signals,
-            faq_candidates=faq_candidates
+            faq_candidates=faq_candidates,
+            json_ld_data=json_ld_data,
+            site_name=site_name
         )
 
