@@ -88,7 +88,7 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
           h-screen md:h-[calc(100vh-57px)]
           bg-white/95 backdrop-blur-xl border-r border-slate-200/80
           shadow-lg md:shadow-[var(--shadow-glass)]
-          sidebar-transition flex flex-col justify-between
+          sidebar-transition flex flex-col justify-between shrink-0
           ${isExpanded ? 'w-64' : 'w-16'}
           ${mobileOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'}
         `}

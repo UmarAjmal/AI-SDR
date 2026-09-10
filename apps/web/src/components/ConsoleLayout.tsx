@@ -81,7 +81,7 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 w-full p-4 sm:p-6 md:p-8 max-w-7xl mx-auto overflow-x-hidden pb-24 md:pb-8">
+        <main className="flex-1 min-w-0 w-full p-4 sm:p-6 md:p-8 overflow-x-hidden pb-24 md:pb-8">
           {/* Breadcrumbs (shown when viewing a specific workspace tool) */}
           {activeTab !== 'workspaces' && (
             <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] font-medium mb-6 pb-3 border-b border-slate-200/70">
