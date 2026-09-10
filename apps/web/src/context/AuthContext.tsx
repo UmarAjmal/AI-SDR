@@ -12,6 +12,16 @@ export interface AuthWorkspace {
   role: string;
 }
 
+export interface RegisterParams {
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+  jobTitle?: string;
+  workspaceName?: string;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   workspace: AuthWorkspace | null;
@@ -19,7 +29,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, workspaceName: string) => Promise<void>;
+  register: (paramsOrEmail: string | RegisterParams, password?: string, workspaceName?: string) => Promise<void>;
   loginDemo: () => void;
   logout: () => void;
 }
@@ -95,19 +105,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (email: string, password: string, workspaceName: string) => {
+  const register = async (
+    paramsOrEmail: string | RegisterParams,
+    passwordParam?: string,
+    workspaceNameParam?: string
+  ) => {
     try {
-      const res = await axios.post('/api/v1/auth/register', {
-        email,
-        password,
-        workspace_name: workspaceName,
-      });
+      let body: any = {};
+      let resolvedWsName = '';
+      if (typeof paramsOrEmail === 'string') {
+        body = {
+          email: paramsOrEmail,
+          password: passwordParam,
+          workspace_name: workspaceNameParam,
+        };
+        resolvedWsName = workspaceNameParam || paramsOrEmail.split('@')[0] + "'s Workspace";
+      } else {
+        body = {
+          email: paramsOrEmail.email,
+          password: paramsOrEmail.password,
+          first_name: paramsOrEmail.firstName,
+          last_name: paramsOrEmail.lastName,
+          company_name: paramsOrEmail.companyName,
+          job_title: paramsOrEmail.jobTitle,
+          workspace_name: paramsOrEmail.workspaceName,
+        };
+        resolvedWsName =
+          paramsOrEmail.companyName ||
+          (paramsOrEmail.firstName ? `${paramsOrEmail.firstName}'s Workspace` : paramsOrEmail.email.split('@')[0] + "'s Workspace");
+      }
+
+      const res = await axios.post('/api/v1/auth/register', body);
       const data = res.data;
       const authToken = data.access_token;
-      const authUser: AuthUser = { id: data.user_id, email };
+      const authUser: AuthUser = { id: data.user_id, email: body.email };
       const authWs: AuthWorkspace = {
         id: data.active_workspace_id,
-        name: workspaceName,
+        name: resolvedWsName,
         role: data.active_role || 'OWNER',
       };
 

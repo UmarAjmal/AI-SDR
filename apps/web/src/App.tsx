@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogOut, User, Building } from 'lucide-react';
+import { LogOut, User, Building, ArrowLeft } from 'lucide-react';
 import { SquircleButton } from './components/ui/SquircleButton';
 import { ThemePicker } from './components/ui/ThemePicker';
 import { DashboardOverview } from './components/DashboardOverview';
@@ -11,7 +11,7 @@ import { IntegrationsView } from './components/IntegrationsView';
 import { CalendarView } from './components/CalendarView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SettingsView } from './components/SettingsView';
-import { AuthView } from './components/AuthView';
+import { HomePage } from './components/HomePage';
 import { useAuth } from './context/AuthContext';
 
 type NavTab =
@@ -39,6 +39,7 @@ const NAV_ITEMS: { id: NavTab; label: string }[] = [
 
 export const App: React.FC = () => {
   const { isAuthenticated, user, workspace, logout, isLoading } = useAuth();
+  const [currentView, setCurrentView] = useState<'home' | 'console'>('home');
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
 
   // Loading Session Skeleton
@@ -57,28 +58,58 @@ export const App: React.FC = () => {
     );
   }
 
-  // If Not Authenticated, show Login / Sign Up View
-  if (!isAuthenticated) {
-    return <AuthView />;
+  // 1. Home Page View (Default)
+  if (currentView === 'home') {
+    return (
+      <HomePage
+        onGoToConsole={() => {
+          if (isAuthenticated) {
+            setCurrentView('console');
+          }
+        }}
+      />
+    );
   }
 
+  // 2. Console View (SDR Operations Dashboard)
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] font-sans">
       {/* Top Frosted Navbar */}
       <header className="sticky top-0 z-50 bg-white/75 backdrop-blur-xl border-b border-white/80 shadow-[var(--shadow-glass)] px-6 py-3.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          {/* Brand Logo & Squircle Monogram */}
+          {/* Brand Logo & Squircle Monogram + Back to Home */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-[14px] bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-black text-sm flex items-center justify-center border border-[var(--accent-border)] shadow-xs">
-              SDR
-            </div>
-            <div>
-              <h1 className="text-base font-bold tracking-tight text-[var(--text-primary)]">
-                Codenter AI SDR
-              </h1>
-              <p className="text-[11px] text-[var(--text-muted)] font-medium">
-                Enterprise Autonomous Platform
-              </p>
+            <button
+              onClick={() => setCurrentView('home')}
+              title="Return to Home Page"
+              className="flex items-center gap-2 p-1.5 -ml-1.5 rounded-[14px] hover:bg-slate-100/80 transition-all text-[var(--text-secondary)] hover:text-[var(--text-primary)] group"
+            >
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              <span className="hidden sm:inline text-xs font-bold text-slate-500 group-hover:text-slate-900">
+                Home
+              </span>
+            </button>
+
+            <div className="h-4 w-[1px] bg-slate-200" />
+
+            <div
+              className="flex items-center gap-2.5 cursor-pointer"
+              onClick={() => setActiveTab('overview')}
+            >
+              <div className="w-9 h-9 rounded-[12px] bg-[var(--accent-subtle)] text-[var(--accent-primary)] font-black text-xs flex items-center justify-center border border-[var(--accent-border)] shadow-xs">
+                SDR
+              </div>
+              <div>
+                <h1 className="text-sm font-bold tracking-tight text-[var(--text-primary)] flex items-center gap-1.5">
+                  Codenter Console
+                  <span className="px-1.5 py-0.5 rounded-[8px] bg-[var(--accent-subtle)] text-[var(--accent-primary)] text-[9px] font-black border border-[var(--accent-border)]">
+                    PRO
+                  </span>
+                </h1>
+                <p className="text-[10px] text-[var(--text-muted)] font-medium">
+                  Autonomous Sales Engine
+                </p>
+              </div>
             </div>
           </div>
 
@@ -124,7 +155,10 @@ export const App: React.FC = () => {
               <SquircleButton
                 variant="ghost"
                 size="sm"
-                onClick={logout}
+                onClick={() => {
+                  logout();
+                  setCurrentView('home');
+                }}
                 className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
                 title="Sign Out of Session"
               >
@@ -135,7 +169,7 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Console Container */}
       <main className="max-w-7xl mx-auto p-6 md:p-8">
         {activeTab === 'overview' && <DashboardOverview onNavigate={(tab) => setActiveTab(tab as NavTab)} />}
         {activeTab === 'leads' && <LeadsView />}

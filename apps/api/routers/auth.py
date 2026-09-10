@@ -37,9 +37,19 @@ async def register(
     db.add(new_user)
     await db.flush()
 
-    # 2. Create Default Workspace
+    # 2. Create Default Workspace (derived automatically if not provided)
+    ws_name = payload.workspace_name
+    if not ws_name or not ws_name.strip():
+        if payload.company_name and payload.company_name.strip():
+            ws_name = payload.company_name.strip()
+        elif payload.first_name and payload.first_name.strip():
+            ws_name = f"{payload.first_name.strip()}'s Workspace"
+        else:
+            domain_part = payload.email.split("@")[0].replace(".", " ").title()
+            ws_name = f"{domain_part}'s Workspace"
+
     new_workspace = Workspace(
-        name=payload.workspace_name,
+        name=ws_name,
         domain=payload.email.split("@")[-1] if "@" in payload.email else None,
         settings={"theme": "cobalt", "onboarding_completed": False}
     )
@@ -230,3 +240,8 @@ async def refresh_token(
 @router.get("/me", response_model=UserResponse)
 async def get_me(user: User = Depends(get_current_user)):
     return user
+
+@router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(key="sdr_refresh_token")
+    return {"status": "success", "message": "Logged out successfully"}

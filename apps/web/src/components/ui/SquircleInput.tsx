@@ -3,16 +3,24 @@ import React, { InputHTMLAttributes } from 'react';
 interface SquircleInputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  hint?: string;
   icon?: React.ReactNode;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
 }
 
 export const SquircleInput: React.FC<SquircleInputProps> = ({
   label,
   error,
+  hint,
   icon,
+  leftIcon,
+  rightIcon,
   className = '',
   ...props
 }) => {
+  const effectiveLeftIcon = leftIcon || icon;
+
   return (
     <div className="flex flex-col gap-1.5 w-full">
       {label && (
@@ -21,18 +29,24 @@ export const SquircleInput: React.FC<SquircleInputProps> = ({
         </label>
       )}
       <div className="relative flex items-center">
-        {icon && (
+        {effectiveLeftIcon && (
           <div className="absolute left-3.5 text-[var(--text-muted)] pointer-events-none flex items-center">
-            {icon}
+            {effectiveLeftIcon}
           </div>
         )}
         <input
           className={`w-full bg-white/70 backdrop-blur-md border border-white/80 rounded-[16px] px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] shadow-[var(--shadow-glass)] outline-none transition-all duration-200 focus:bg-white/90 focus:ring-4 focus:ring-[var(--accent-glow)] focus:border-[var(--accent-border)] ${
-            icon ? 'pl-10' : ''
-          } ${error ? 'border-red-400 ring-2 ring-red-100' : ''} ${className}`}
+            effectiveLeftIcon ? 'pl-10' : ''
+          } ${rightIcon ? 'pr-10' : ''} ${error ? 'border-red-400 ring-2 ring-red-100' : ''} ${className}`}
           {...props}
         />
+        {rightIcon && (
+          <div className="absolute right-3.5 flex items-center">
+            {rightIcon}
+          </div>
+        )}
       </div>
+      {hint && !error && <span className="text-[11px] text-[var(--text-muted)] font-medium">{hint}</span>}
       {error && <span className="text-xs text-red-500 font-medium">{error}</span>}
     </div>
   );
