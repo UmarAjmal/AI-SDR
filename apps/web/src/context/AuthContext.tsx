@@ -30,6 +30,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (paramsOrEmail: string | RegisterParams, password?: string, workspaceName?: string) => Promise<void>;
+  switchWorkspace: (ws: AuthWorkspace) => void;
   loginDemo: () => void;
   logout: () => void;
 }
@@ -46,12 +47,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [workspace, setWorkspace] = useState<AuthWorkspace | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Sync token to Axios headers
-  const applyAuthToken = (authToken: string | null) => {
+  // Sync token and workspace ID to Axios headers
+  const applyAuthHeaders = (authToken: string | null, wsId: string | null) => {
     if (authToken) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
     } else {
       delete axios.defaults.headers.common['Authorization'];
+    }
+
+    if (wsId) {
+      axios.defaults.headers.common['X-Workspace-Id'] = wsId;
+    } else {
+      delete axios.defaults.headers.common['X-Workspace-Id'];
     }
   };
 
@@ -62,10 +69,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const savedWs = localStorage.getItem(WS_KEY);
 
       if (savedToken && savedUser && savedWs) {
+        const parsedWs = JSON.parse(savedWs);
         setToken(savedToken);
         setUser(JSON.parse(savedUser));
-        setWorkspace(JSON.parse(savedWs));
-        applyAuthToken(savedToken);
+        setWorkspace(parsedWs);
+        applyAuthHeaders(savedToken, parsedWs.id);
       }
     } catch (e) {
       console.error('Failed to restore auth session:', e);
@@ -76,6 +84,81 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     }
   }, []);
+
+  // Axios response interceptor for graceful 401 token refresh
+  useEffect(() => {
+    let isRefreshing = false;
+    let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = [];
+
+    const processQueue = (error: any, newToken: string | null = null) => {
+      failedQueue.forEach((prom) => {
+        if (error) {
+          prom.reject(error);
+        } else if (newToken) {
+          prom.resolve(newToken);
+        }
+      });
+      failedQueue = [];
+    };
+
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+        if (
+          error.response?.status === 401 &&
+          !originalRequest?._retry &&
+          !originalRequest?.url?.includes('/auth/login') &&
+          !originalRequest?.url?.includes('/auth/register') &&
+          !originalRequest?.url?.includes('/auth/refresh')
+        ) {
+          if (isRefreshing) {
+            return new Promise((resolve, reject) => {
+              failedQueue.push({ resolve, reject });
+            })
+              .then((newTok) => {
+                originalRequest.headers['Authorization'] = `Bearer ${newTok}`;
+                return axios(originalRequest);
+              })
+              .catch((err) => Promise.reject(err));
+          }
+
+          originalRequest._retry = true;
+          isRefreshing = true;
+
+          try {
+            const refreshRes = await axios.post('/api/v1/auth/refresh');
+            const newAccessToken = refreshRes.data.access_token;
+            setToken(newAccessToken);
+            localStorage.setItem(TOKEN_KEY, newAccessToken);
+            applyAuthHeaders(newAccessToken, workspace?.id || null);
+
+            processQueue(null, newAccessToken);
+            originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+            return axios(originalRequest);
+          } catch (refreshErr) {
+            processQueue(refreshErr, null);
+            return Promise.reject(error);
+          } finally {
+            isRefreshing = false;
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, [workspace]);
+
+  const switchWorkspace = (ws: AuthWorkspace) => {
+    setWorkspace(ws);
+    localStorage.setItem(WS_KEY, JSON.stringify(ws));
+    if (ws.id) {
+      axios.defaults.headers.common['X-Workspace-Id'] = ws.id;
+    }
+  };
 
   const login = async (email: string, password: string) => {
     try {
@@ -97,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_KEY, JSON.stringify(authUser));
       localStorage.setItem(WS_KEY, JSON.stringify(authWs));
 
-      applyAuthToken(authToken);
+      applyAuthHeaders(authToken, authWs.id);
     } catch (err: any) {
       // If backend is unreachable or returns error, rethrow message
       const msg = err.response?.data?.detail || err.message || 'Login failed. Check your credentials.';
@@ -153,7 +236,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_KEY, JSON.stringify(authUser));
       localStorage.setItem(WS_KEY, JSON.stringify(authWs));
 
-      applyAuthToken(authToken);
+      applyAuthHeaders(authToken, authWs.id);
     } catch (err: any) {
       const msg = err.response?.data?.detail || err.message || 'Registration failed. Try a different email.';
       throw new Error(msg);
@@ -180,7 +263,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(USER_KEY, JSON.stringify(demoUser));
     localStorage.setItem(WS_KEY, JSON.stringify(demoWs));
 
-    applyAuthToken(demoToken);
+    applyAuthHeaders(demoToken, demoWs.id);
   };
 
   const logout = () => {
@@ -192,7 +275,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(WS_KEY);
 
-    applyAuthToken(null);
+    applyAuthHeaders(null, null);
 
     // Call logout endpoint to clear HttpOnly cookie
     axios.post('/api/v1/auth/logout').catch(() => {});
@@ -208,6 +291,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         register,
+        switchWorkspace,
         loginDemo,
         logout,
       }}

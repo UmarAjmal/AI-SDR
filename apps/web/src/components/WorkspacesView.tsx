@@ -43,7 +43,7 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
   isCreateModalOpen = false,
   onCloseCreateModal,
 }) => {
-  const { workspace: currentAuthWs } = useAuth();
+  const { workspace: currentAuthWs, switchWorkspace } = useAuth();
 
   // Workspaces list state
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([
@@ -78,28 +78,29 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
     }
   }, [isCreateModalOpen]);
 
-  // Fetch workspaces from backend
+  // Fetch all workspaces from backend
   useEffect(() => {
     const fetchWorkspaces = async () => {
       try {
-        const res = await axios.get('/api/v1/workspaces/current');
-        if (res.data) {
-          setWorkspaces([
-            {
-              id: res.data.id,
-              name: res.data.name || 'AI SDR',
-              region: 'AWS | ap-northeast-2',
-              tier: 'NANO',
-              leadsCount: 142,
-              campaignsCount: 3,
-              databaseMb: 26,
-              status: 'ACTIVE',
-              createdAt: res.data.created_at || '2026-09-01',
-            },
-          ]);
+        const res = await axios.get('/api/v1/workspaces');
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          const mapped: WorkspaceItem[] = res.data.map((w: any) => ({
+            id: w.id,
+            name: w.name,
+            domain: w.domain,
+            website_url: w.website_url,
+            region: 'AWS | ap-northeast-2',
+            tier: w.settings?.tier || 'FREE',
+            leadsCount: 142,
+            campaignsCount: 3,
+            databaseMb: 26,
+            status: 'ACTIVE',
+            createdAt: w.created_at || '2026-09-01',
+          }));
+          setWorkspaces(mapped);
         }
       } catch (err) {
-        // Fallback to local default workspace
+        console.error('Failed to load workspaces:', err);
       }
     };
     fetchWorkspaces();
@@ -137,10 +138,15 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
       setModalOpen(false);
       onCloseCreateModal?.();
 
+      if (switchWorkspace) {
+        switchWorkspace({ id: created.id, name: created.name, role: 'OWNER' });
+      }
+
       // Golden Path Step 2: Auto-select and navigate to Knowledge Base for crawl pipeline!
       onSelectWorkspace(created.id, created.name, 'knowledge');
-    } catch (err) {
-      // Offline fallback
+    } catch (err: any) {
+      console.error('Failed to create workspace on server:', err);
+      // Fallback
       const created: WorkspaceItem = {
         id: `ws-${Date.now()}`,
         name: newWsName.trim(),
@@ -158,6 +164,9 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
       setNewWsWebsiteUrl('');
       setModalOpen(false);
       onCloseCreateModal?.();
+      if (switchWorkspace) {
+        switchWorkspace({ id: created.id, name: created.name, role: 'OWNER' });
+      }
       onSelectWorkspace(created.id, created.name, 'knowledge');
     } finally {
       setIsCreating(false);
@@ -275,7 +284,12 @@ export const WorkspacesView: React.FC<WorkspacesViewProps> = ({
           {filteredWorkspaces.map((ws) => (
             <div
               key={ws.id}
-              onClick={() => onSelectWorkspace(ws.id, ws.name)}
+              onClick={() => {
+                if (switchWorkspace) {
+                  switchWorkspace({ id: ws.id, name: ws.name, role: 'OWNER' });
+                }
+                onSelectWorkspace(ws.id, ws.name);
+              }}
               className="group relative rounded-[24px] bg-white/75 backdrop-blur-xl border border-white/80 p-5 shadow-[var(--shadow-glass)] hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-5"
             >
               {/* Card Top: Title, Subtitle, Menu */}

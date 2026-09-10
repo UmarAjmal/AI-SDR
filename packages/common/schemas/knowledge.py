@@ -60,6 +60,10 @@ class BusinessProfileResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+class KnowledgeSearchRequest(BaseModel):
+    query: str
+    top_k: int = 3
+
 class ChunkSearchResult(BaseModel):
     chunk_id: str
     document_id: str

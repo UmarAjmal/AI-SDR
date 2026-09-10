@@ -11,6 +11,7 @@ from packages.common.models.workspace import Workspace, WorkspaceMember, Workspa
 from packages.common.models.audit import AuditLog
 from packages.common.schemas.auth import UserRegisterRequest, UserLoginRequest, TokenResponse, UserResponse
 from packages.common.encryption import encryptor
+from packages.common.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -101,7 +102,7 @@ async def register(
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        expires_in=15 * 60,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user_id=new_user.id,
         active_workspace_id=new_workspace.id,
         active_role=WorkspaceRole.OWNER.value
@@ -168,7 +169,7 @@ async def login(
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        expires_in=15 * 60,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user_id=user.id,
         active_workspace_id=workspace.id,
         active_role=membership.role.value
@@ -231,7 +232,7 @@ async def refresh_token(
     return TokenResponse(
         access_token=new_access_token,
         token_type="bearer",
-        expires_in=15 * 60,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user_id=user.id,
         active_workspace_id=membership.workspace_id,
         active_role=membership.role.value

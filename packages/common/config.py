@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # Security & Auth
     JWT_SECRET: str = Field(default="dev-jwt-insecure-secret-key-change-in-prod-xyz-987")
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ENCRYPTION_KEY_SECRET: str = Field(
         default="k9_F_8a9B_3zQ2x1W_7vP0m5L4j3H2g1S0d9F8a7B6c="

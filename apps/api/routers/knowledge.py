@@ -1,8 +1,10 @@
+import asyncio
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from apps.api.core.database import get_db
+from apps.api.core.database import get_db, AsyncSessionLocal
 from apps.api.core.dependencies import get_current_workspace_context, require_role, WorkspaceContext
 from packages.common.models.workspace import WorkspaceRole
 from packages.common.models.knowledge import BusinessProfile, WebsiteScan, KnowledgeChunk, KnowledgeDocument, ScanStatus
@@ -11,12 +13,30 @@ from packages.common.schemas.knowledge import (
     WebsiteScanResponse,
     BusinessProfileResponse,
     BusinessProfileUpdateRequest,
+    KnowledgeSearchRequest,
     ChunkSearchResult
 )
 from packages.ai.embeddings import EmbeddingGenerator
+from packages.website_intelligence.crawler_service import WebsiteCrawlerService
 from apps.worker.tasks.crawler_tasks import run_website_scan_task
 
+logger = logging.getLogger("codenter.knowledge")
+
 router = APIRouter(tags=["Website Intelligence & Knowledge"])
+
+async def _background_website_scan(workspace_id: str, scan_id: str, base_url: str):
+    """Fallback local asynchronous execution of the Website Intelligence crawl pipeline."""
+    try:
+        async with AsyncSessionLocal() as session:
+            await WebsiteCrawlerService.run_scan(
+                workspace_id=workspace_id,
+                scan_id=scan_id,
+                base_url=base_url,
+                db=session
+            )
+            logger.info(f"Local crawl completed successfully for {base_url}")
+    except Exception as e:
+        logger.error(f"Local crawl failed for {base_url}: {e}")
 
 @router.post("/website-scans", response_model=WebsiteScanResponse, status_code=status.HTTP_202_ACCEPTED)
 async def start_website_scan(
@@ -33,18 +53,30 @@ async def start_website_scan(
     await db.commit()
     await db.refresh(scan)
 
-    # Dispatch Celery background worker task
+    # Dispatch Celery background worker task, or fallback to asyncio background task
     try:
         run_website_scan_task.delay(
             workspace_id=ctx.workspace_id,
             scan_id=scan.id,
             base_url=payload.url
         )
-    except Exception:
-        # If celery broker is not active during local tests, the task can be run synchronously or handled
-        pass
+    except Exception as err:
+        logger.warning(f"Celery dispatch failed ({err}). Spawning local asyncio crawl task...")
+        asyncio.create_task(_background_website_scan(ctx.workspace_id, scan.id, payload.url))
 
     return scan
+
+@router.get("/website-scans/latest", response_model=WebsiteScanResponse | None)
+async def get_latest_website_scan(
+    ctx: WorkspaceContext = Depends(get_current_workspace_context),
+    db: AsyncSession = Depends(get_db)
+):
+    res = await db.execute(
+        select(WebsiteScan)
+        .where(WebsiteScan.workspace_id == ctx.workspace_id)
+        .order_by(WebsiteScan.created_at.desc())
+    )
+    return res.scalars().first()
 
 @router.get("/website-scans/{scan_id}", response_model=WebsiteScanResponse)
 async def get_website_scan_status(
@@ -112,15 +144,14 @@ async def update_business_profile(
 
 @router.post("/knowledge/search", response_model=list[ChunkSearchResult])
 async def search_knowledge_chunks(
-    query: str,
-    limit: int = 3,
+    payload: KnowledgeSearchRequest,
     ctx: WorkspaceContext = Depends(get_current_workspace_context),
     db: AsyncSession = Depends(get_db)
 ):
     """
     RAG Vector similarity search over workspace knowledge chunks with source citations.
     """
-    query_emb = await EmbeddingGenerator.get_embedding(query)
+    query_emb = await EmbeddingGenerator.get_embedding(payload.query)
 
     # Query all chunks belonging to the current workspace
     res = await db.execute(
@@ -141,7 +172,7 @@ async def search_knowledge_chunks(
     scored.sort(key=lambda x: x[2], reverse=True)
 
     results = []
-    for chunk, doc, sim in scored[:limit]:
+    for chunk, doc, sim in scored[:payload.top_k]:
         results.append(ChunkSearchResult(
             chunk_id=chunk.id,
             document_id=doc.id,

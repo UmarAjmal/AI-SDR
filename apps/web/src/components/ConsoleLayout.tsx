@@ -31,7 +31,7 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
   onGoToHome,
   initialTab = 'workspaces',
 }) => {
-  const { workspace } = useAuth();
+  const { workspace, switchWorkspace } = useAuth();
   const [activeTab, setActiveTab] = useState<ConsoleTab>(initialTab);
   const [activeWorkspaceName, setActiveWorkspaceName] = useState<string>(workspace?.name || 'AI SDR');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
@@ -50,8 +50,11 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
     settings: 'Settings',
   };
 
-  const handleSelectWorkspace = (_id: string, name: string, targetTab?: ConsoleTab) => {
+  const handleSelectWorkspace = (id: string, name: string, targetTab?: ConsoleTab) => {
     setActiveWorkspaceName(name);
+    if (switchWorkspace) {
+      switchWorkspace({ id, name, role: 'OWNER' });
+    }
     setActiveTab(targetTab || 'overview');
   };
 
