@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Layers,
   LayoutDashboard,
@@ -59,6 +59,11 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
   mobileOpen,
   onCloseMobile,
 }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Auto-collapsible: expanded when hovered on desktop, or when opened on mobile
+  const isExpanded = isHovered;
+
   const handleItemClick = (tabId: ConsoleTab) => {
     onSelectTab(tabId);
     onCloseMobile();
@@ -74,16 +79,18 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
         />
       )}
 
-      {/* Main Sidebar Shell */}
+      {/* Main Sidebar Shell - Auto-collapsible on Hover */}
       <aside
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={`
           fixed md:sticky top-0 md:top-[57px] left-0 z-40
           h-screen md:h-[calc(100vh-57px)]
           bg-white/95 backdrop-blur-xl border-r border-slate-200/80
           shadow-lg md:shadow-[var(--shadow-glass)]
-          flex flex-col justify-between w-64
-          ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          transition-transform duration-200
+          sidebar-transition flex flex-col justify-between
+          ${isExpanded ? 'w-64' : 'w-16'}
+          ${mobileOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'}
         `}
       >
         {/* Mobile Header (Close Button) */}
@@ -114,6 +121,7 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => handleItemClick(item.id)}
+                title={!isExpanded ? item.label : undefined}
                 className={`
                   w-full flex items-center gap-3.5 px-3 py-2.5 rounded-[16px] text-xs font-semibold
                   transition-all duration-150 group relative
@@ -137,13 +145,15 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
                   />
                 </div>
 
-                {/* Text Label */}
-                <span className="truncate flex-1 text-left">
-                  {item.label}
-                </span>
+                {/* Text Label (shown when expanded) */}
+                {(isExpanded || mobileOpen) && (
+                  <span className="truncate flex-1 text-left animate-in fade-in duration-150">
+                    {item.label}
+                  </span>
+                )}
 
                 {/* Optional Badge */}
-                {item.badge && (
+                {(isExpanded || mobileOpen) && item.badge && (
                   <span
                     className={`px-1.5 py-0.5 rounded-[6px] text-[9px] font-black uppercase tracking-wider shrink-0 ${
                       isActive
